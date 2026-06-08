@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import '../services/api_service.dart';
+import 'guess_price_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -253,6 +254,18 @@ class _HomeScreenState extends State<HomeScreen> {
                       subtitle: 'Трать бонусы',
                       color: const Color(0xFFFF9800),
                       onTap: () {},
+                    ),
+                    _buildActionCard(
+                      icon: Icons.search,
+                      title: 'Оценщик',
+                      subtitle: 'Угадай цену',
+                      color: const Color(0xFF1D3557),
+                      onTap: () {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(builder: (_) => const GuessPriceScreen()),
+                        );
+                      },
                     ),
                     _buildActionCard(
                       icon: Icons.emoji_events,

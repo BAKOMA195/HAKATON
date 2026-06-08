@@ -233,4 +233,40 @@ class ApiService {
     final response = await _get('/api/my-league');
     return _handleResponse(response);
   }
+
+  // --- ОЦЕНЩИК (GUESS PRICE) ---
+
+  static Future<GuessPriceSession> startGuessPrice() async {
+    final response = await _post('/api/guess-price/start');
+    final data = _handleResponse(response);
+    return GuessPriceSession.fromJson(data);
+  }
+
+  static Future<List<GuessPriceItem>> getGuessPriceItems(int sessionId) async {
+    final response = await _get('/api/guess-price/items?session_id=$sessionId');
+    final data = _handleResponse(response);
+    return (data as List).map((item) => GuessPriceItem.fromJson(item)).toList();
+  }
+
+  static Future<GuessPriceResult> submitGuessPrice({
+    required int sessionId,
+    required int itemId,
+    required int guess,
+  }) async {
+    final response = await _post('/api/guess-price/guess',
+        body: jsonEncode({
+          'session_id': sessionId,
+          'item_id': itemId,
+          'guess': guess,
+        }));
+    final data = _handleResponse(response);
+    return GuessPriceResult.fromJson(data);
+  }
+
+  static Future<GuessPriceSession> finishGuessPrice(int sessionId) async {
+    final response = await _post('/api/guess-price/finish',
+        body: jsonEncode({'session_id': sessionId}));
+    final data = _handleResponse(response);
+    return GuessPriceSession.fromJson(data);
+  }
 }

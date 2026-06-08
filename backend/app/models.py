@@ -217,3 +217,59 @@ class SeasonalCampaign(Base):
     final_reward_bonus = Column(Integer, default=0)
     final_reward_badge = Column(String(100), nullable=True)
     is_active = Column(Boolean, default=True)
+
+
+class GuessPriceItem(Base):
+    """
+    Таблица предметов для игры «Оценщик».
+    """
+    __tablename__ = "guess_price_items"
+
+    id = Column(Integer, primary_key=True, index=True)
+    emoji = Column(String(10), nullable=False)
+    name = Column(String(200), nullable=False)
+    description = Column(Text, nullable=True)
+    min_price = Column(Integer, nullable=False)
+    max_price = Column(Integer, nullable=False)
+    real_price = Column(Integer, nullable=False)
+    is_active = Column(Boolean, default=True)
+
+
+class GuessPriceSession(Base):
+    """
+    Таблица сессий игры «Оценщик».
+    """
+    __tablename__ = "guess_price_sessions"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"))
+    total_rounds = Column(Integer, default=5)
+    rounds_completed = Column(Integer, default=0)
+    total_coins_earned = Column(Integer, default=0)
+    hits = Column(Integer, default=0)
+    started_at = Column(DateTime, default=datetime.utcnow)
+    finished_at = Column(DateTime, nullable=True)
+    is_finished = Column(Boolean, default=False)
+
+    user = relationship("User")
+
+
+class GuessPriceGuess(Base):
+    """
+    Таблица попыток оценки в игре «Оценщик».
+    """
+    __tablename__ = "guess_price_guesses"
+
+    id = Column(Integer, primary_key=True, index=True)
+    session_id = Column(Integer, ForeignKey("guess_price_sessions.id"))
+    item_id = Column(Integer, ForeignKey("guess_price_items.id"))
+    user_id = Column(Integer, ForeignKey("users.id"))
+    guess = Column(Integer, nullable=False)
+    coins_earned = Column(Integer, default=0)
+    accuracy = Column(Integer, nullable=False)
+    tier = Column(String(20), nullable=False)
+    guessed_at = Column(DateTime, default=datetime.utcnow)
+
+    session = relationship("GuessPriceSession")
+    item = relationship("GuessPriceItem")
+    user = relationship("User")

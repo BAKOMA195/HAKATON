@@ -1,7 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.database import engine, Base
-from app.routers import auth, quests, daily, wheel, marketplace, leaderboard, analytics
+from app.routers import auth, quests, daily, wheel, marketplace, leaderboard, analytics, guess_price
 
 # ============================================
 # ГЛАВНЫЙ ФАЙЛ ПРИЛОЖЕНИЯ (SKS Quest API)
@@ -33,6 +33,7 @@ app = FastAPI(
     - **Лидерборд** - анонимный рейтинг с лигами
     - **Достижения** - бейджи за ключевые вехи
     - **Аналитика** - дашборд для маркетологов
+    - **Оценщик** - мини-игра «Угадай цену залога»
     
     ### Роли пользователей:
     - **client** - обычный пользователь
@@ -69,6 +70,7 @@ app.include_router(wheel.router)          # /api/wheel/* - колесо форт
 app.include_router(marketplace.router)    # /api/marketplace/* - каталог призов
 app.include_router(leaderboard.router)    # /api/* - лидерборд и достижения
 app.include_router(analytics.router)      # /api/analytics/* - аналитика
+app.include_router(guess_price.router)    # /api/guess-price/* - игра «Оценщик»
 
 
 @app.get("/", tags=["Главная"])

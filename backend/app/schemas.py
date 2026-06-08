@@ -206,3 +206,51 @@ class AnalyticsDashboard(BaseModel):
     total_bonuses_issued: float
     total_bonuses_spent: float
     average_streak: float
+
+
+# --- Схемы для игры «Оценщик» ---
+
+class GuessPriceItemResponse(BaseModel):
+    """Предмет для игры «Оценщик»"""
+    id: int
+    emoji: str
+    name: str
+    description: Optional[str]
+    min_price: int
+    max_price: int
+    real_price: int
+
+    class Config:
+        from_attributes = True
+
+
+class GuessPriceSessionResponse(BaseModel):
+    """Сессия игры «Оценщик»"""
+    session_id: int
+    total_rounds: int
+    rounds_completed: int
+    total_coins_earned: int
+    hits: int
+
+    class Config:
+        from_attributes = True
+
+
+class GuessPriceGuessRequest(BaseModel):
+    """Запрос на оценку предмета"""
+    session_id: int
+    item_id: int
+    guess: int
+
+
+class GuessPriceGuessResponse(BaseModel):
+    """Результат оценки"""
+    coins_earned: int
+    accuracy: int
+    tier: str
+    message: str
+
+
+class GuessPriceFinishRequest(BaseModel):
+    """Запрос на завершение сессии"""
+    session_id: int

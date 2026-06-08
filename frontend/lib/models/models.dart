@@ -194,3 +194,84 @@ class DailyCheckinResult {
     );
   }
 }
+
+class GuessPriceItem {
+  final int id;
+  final String emoji;
+  final String name;
+  final String description;
+  final int minPrice;
+  final int maxPrice;
+  final int realPrice;
+
+  GuessPriceItem({
+    required this.id,
+    required this.emoji,
+    required this.name,
+    required this.description,
+    required this.minPrice,
+    required this.maxPrice,
+    required this.realPrice,
+  });
+
+  factory GuessPriceItem.fromJson(Map<String, dynamic> json) {
+    return GuessPriceItem(
+      id: json['id'],
+      emoji: json['emoji'],
+      name: json['name'],
+      description: json['description'] ?? '',
+      minPrice: json['min_price'],
+      maxPrice: json['max_price'],
+      realPrice: json['real_price'],
+    );
+  }
+}
+
+class GuessPriceResult {
+  final int coinsEarned;
+  final int accuracy;
+  final String tier;
+  final String message;
+
+  GuessPriceResult({
+    required this.coinsEarned,
+    required this.accuracy,
+    required this.tier,
+    required this.message,
+  });
+
+  factory GuessPriceResult.fromJson(Map<String, dynamic> json) {
+    return GuessPriceResult(
+      coinsEarned: json['coins_earned'],
+      accuracy: json['accuracy'],
+      tier: json['tier'],
+      message: json['message'],
+    );
+  }
+}
+
+class GuessPriceSession {
+  final int sessionId;
+  final int totalRounds;
+  final int roundsCompleted;
+  final int totalCoinsEarned;
+  final int hits;
+
+  GuessPriceSession({
+    required this.sessionId,
+    required this.totalRounds,
+    required this.roundsCompleted,
+    required this.totalCoinsEarned,
+    required this.hits,
+  });
+
+  factory GuessPriceSession.fromJson(Map<String, dynamic> json) {
+    return GuessPriceSession(
+      sessionId: json['session_id'],
+      totalRounds: json['total_rounds'],
+      roundsCompleted: json['rounds_completed'],
+      totalCoinsEarned: json['total_coins_earned'],
+      hits: json['hits'],
+    );
+  }
+}
