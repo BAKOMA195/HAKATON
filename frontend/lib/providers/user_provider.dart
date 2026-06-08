@@ -12,15 +12,20 @@ class UserProvider with ChangeNotifier {
   String? get error => _error;
   bool get isLoggedIn => _user != null;
 
-  Future<void> loadUser() async {
-    final token = await ApiService.loadToken();
-    if (token != null) {
-      try {
-        _user = await ApiService.getMe();
-        notifyListeners();
-      } catch (e) {
-        await ApiService.clearToken();
-      }
+  Future<void> autoLogin() async {
+    _isLoading = true;
+    _error = null;
+    notifyListeners();
+
+    try {
+      await ApiService.login(username: 'client1', password: 'password123');
+      _user = await ApiService.getMe();
+      _isLoading = false;
+      notifyListeners();
+    } catch (e) {
+      _error = e.toString().replaceAll('Exception: ', '');
+      _isLoading = false;
+      notifyListeners();
     }
   }
 

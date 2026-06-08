@@ -1,13 +1,9 @@
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
-import '../providers/user_provider.dart';
-import '../services/api_service.dart';
 import 'home_screen.dart';
 import 'quests_screen.dart';
 import 'wheel_screen.dart';
 import 'marketplace_screen.dart';
 import 'leaderboard_screen.dart';
-import 'profile_screen.dart';
 
 class MainScreen extends StatefulWidget {
   const MainScreen({super.key});
@@ -25,7 +21,6 @@ class _MainScreenState extends State<MainScreen> {
     const WheelScreen(),
     const MarketplaceScreen(),
     const LeaderboardScreen(),
-    const ProfileScreen(),
   ];
 
   @override
@@ -59,7 +54,6 @@ class _MainScreenState extends State<MainScreen> {
               BottomNavigationBarItem(icon: Icon(Icons.casino), label: 'Колесо'),
               BottomNavigationBarItem(icon: Icon(Icons.store), label: 'Призы'),
               BottomNavigationBarItem(icon: Icon(Icons.emoji_events), label: 'Топ'),
-              BottomNavigationBarItem(icon: Icon(Icons.person), label: 'Профиль'),
             ],
           ),
         ),

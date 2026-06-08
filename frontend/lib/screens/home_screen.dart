@@ -1,9 +1,6 @@
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
 import 'package:flutter_animate/flutter_animate.dart';
-import '../providers/user_provider.dart';
 import '../services/api_service.dart';
-import 'main_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -14,13 +11,20 @@ class HomeScreen extends StatefulWidget {
 
 class _HomeScreenState extends State<HomeScreen> {
   bool _isLoading = false;
+  double _bonusBalance = 1500;
+  int _dailyStreak = 5;
+  String _username = 'bakoma';
 
   Future<void> _doCheckin() async {
     setState(() => _isLoading = true);
     try {
       final result = await ApiService.dailyCheckin();
       if (mounted) {
-        setState(() => _isLoading = false);
+        setState(() {
+          _isLoading = false;
+          _bonusBalance += result.bonusEarned;
+          _dailyStreak = result.currentStreak;
+        });
         showDialog(
           context: context,
           builder: (_) => AlertDialog(
@@ -49,10 +53,7 @@ class _HomeScreenState extends State<HomeScreen> {
             ),
             actions: [
               TextButton(
-                onPressed: () {
-                  Navigator.pop(context);
-                  context.read<UserProvider>().refreshUser();
-                },
+                onPressed: () => Navigator.pop(context),
                 child: const Text('Отлично!', style: TextStyle(color: Color(0xFFE94560))),
               ),
             ],
@@ -71,210 +72,202 @@ class _HomeScreenState extends State<HomeScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Consumer<UserProvider>(
-      builder: (context, provider, _) {
-        final user = provider.user;
-        if (user == null) return const Center(child: Text('Не авторизован'));
-
-        return Scaffold(
-          body: Container(
-            decoration: const BoxDecoration(
-              gradient: LinearGradient(
-                begin: Alignment.topCenter,
-                end: Alignment.bottomCenter,
-                colors: [Color(0xFF1A1A2E), Color(0xFF16213E), Color(0xFF0F3460)],
-              ),
-            ),
-            child: SafeArea(
-              child: SingleChildScrollView(
-                padding: const EdgeInsets.all(20),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+    return Scaffold(
+      body: Container(
+        decoration: const BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: [Color(0xFF1A1A2E), Color(0xFF16213E), Color(0xFF0F3460)],
+          ),
+        ),
+        child: SafeArea(
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.all(20),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Шапка с балансом
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    // Шапка с балансом
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              'Привет, ${user.fullName ?? user.username}!',
-                              style: const TextStyle(
-                                fontSize: 22,
-                                fontWeight: FontWeight.bold,
-                                color: Colors.white,
-                              ),
-                            ),
-                            const SizedBox(height: 4),
-                            Text(
-                              'Статус: ${_getLeagueName(user.bonusBalance)}',
-                              style: const TextStyle(color: Colors.white70),
-                            ),
-                          ],
+                        Text(
+                          'Привет, $_username!',
+                          style: const TextStyle(
+                            fontSize: 22,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.white,
+                          ),
                         ),
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                          decoration: BoxDecoration(
-                            gradient: const LinearGradient(
-                              colors: [Color(0xFFE94560), Color(0xFFC23152)],
-                            ),
-                            borderRadius: BorderRadius.circular(20),
-                          ),
-                          child: Row(
-                            children: [
-                              const Icon(Icons.monetization_on, color: Colors.white, size: 20),
-                              const SizedBox(width: 6),
-                              Text(
-                                '${user.bonusBalance.toInt()}',
-                                style: const TextStyle(
-                                  color: Colors.white,
-                                  fontWeight: FontWeight.bold,
-                                  fontSize: 18,
-                                ),
-                              ),
-                            ],
-                          ),
+                        const SizedBox(height: 4),
+                        Text(
+                          'Статус: ${_getLeagueName(_bonusBalance)}',
+                          style: const TextStyle(color: Colors.white70),
                         ),
                       ],
                     ),
-                    const SizedBox(height: 24),
-
-                    // Серия ежедневных входов
                     Container(
-                      padding: const EdgeInsets.all(20),
+                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                       decoration: BoxDecoration(
-                        color: Colors.white.withOpacity(0.05),
-                        borderRadius: BorderRadius.circular(16),
-                        border: Border.all(color: Colors.white.withOpacity(0.1)),
+                        gradient: const LinearGradient(
+                          colors: [Color(0xFFE94560), Color(0xFFC23152)],
+                        ),
+                        borderRadius: BorderRadius.circular(20),
                       ),
-                      child: Column(
+                      child: Row(
                         children: [
-                          Row(
-                            children: [
-                              const Icon(Icons.local_fire_department, color: Colors.orange, size: 28),
-                              const SizedBox(width: 12),
-                              const Text(
-                                'Ежедневный вход',
-                                style: TextStyle(
-                                  fontSize: 18,
-                                  fontWeight: FontWeight.bold,
-                                  color: Colors.white,
-                                ),
-                              ),
-                            ],
-                          ),
-                          const SizedBox(height: 16),
-                          // Прогресс-бар серии
-                          LinearProgressIndicator(
-                            value: (user.dailyStreak % 30) / 30,
-                            backgroundColor: Colors.white.withOpacity(0.1),
-                            valueColor: const AlwaysStoppedAnimation<Color>(Color(0xFFE94560)),
-                            minHeight: 8,
-                            borderRadius: BorderRadius.circular(4),
-                          ),
-                          const SizedBox(height: 8),
-                          Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                            children: [
-                              Text(
-                                '${user.dailyStreak} / 30 дней',
-                                style: const TextStyle(color: Colors.white70),
-                              ),
-                              Text(
-                                _getNextMilestone(user.dailyStreak),
-                                style: const TextStyle(color: Color(0xFFE94560), fontWeight: FontWeight.bold),
-                              ),
-                            ],
-                          ),
-                          const SizedBox(height: 16),
-                          SizedBox(
-                            width: double.infinity,
-                            child: ElevatedButton(
-                              onPressed: _isLoading ? null : _doCheckin,
-                              style: ElevatedButton.styleFrom(
-                                backgroundColor: const Color(0xFFE94560),
-                                foregroundColor: Colors.white,
-                                padding: const EdgeInsets.symmetric(vertical: 14),
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(12),
-                                ),
-                              ),
-                              child: _isLoading
-                                  ? const SizedBox(
-                                      height: 20,
-                                      width: 20,
-                                      child: CircularProgressIndicator(
-                                        strokeWidth: 2,
-                                        color: Colors.white,
-                                      ),
-                                    )
-                                  : const Text(
-                                      'Забрать бонусы!',
-                                      style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-                                    ),
+                          const Icon(Icons.monetization_on, color: Colors.white, size: 20),
+                          const SizedBox(width: 6),
+                          Text(
+                            '${_bonusBalance.toInt()}',
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontWeight: FontWeight.bold,
+                              fontSize: 18,
                             ),
                           ),
                         ],
                       ),
-                    ).animate().fadeIn().slideX(begin: -0.2),
-                    const SizedBox(height: 20),
-
-                    // Быстрые действия
-                    const Text(
-                      'Игровые механики',
-                      style: TextStyle(
-                        fontSize: 20,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.white,
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-                    GridView.count(
-                      shrinkWrap: true,
-                      physics: const NeverScrollableScrollPhysics(),
-                      crossAxisCount: 2,
-                      crossAxisSpacing: 12,
-                      mainAxisSpacing: 12,
-                      childAspectRatio: 1.3,
-                      children: [
-                        _buildActionCard(
-                          icon: Icons.flag,
-                          title: 'Квесты',
-                          subtitle: 'Выполняй задания',
-                          color: const Color(0xFF4CAF50),
-                          onTap: () => _goToTab(1),
-                        ),
-                        _buildActionCard(
-                          icon: Icons.casino,
-                          title: 'Колесо',
-                          subtitle: 'Крути и выигрывай',
-                          color: const Color(0xFF9C27B0),
-                          onTap: () => _goToTab(2),
-                        ),
-                        _buildActionCard(
-                          icon: Icons.store,
-                          title: 'Призы',
-                          subtitle: 'Трать бонусы',
-                          color: const Color(0xFFFF9800),
-                          onTap: () => _goToTab(3),
-                        ),
-                        _buildActionCard(
-                          icon: Icons.emoji_events,
-                          title: 'Лидерборд',
-                          subtitle: 'Топ игроков',
-                          color: const Color(0xFF2196F3),
-                          onTap: () => _goToTab(4),
-                        ),
-                      ],
                     ),
                   ],
                 ),
-              ),
+                const SizedBox(height: 24),
+
+                // Серия ежедневных входов
+                Container(
+                  padding: const EdgeInsets.all(20),
+                  decoration: BoxDecoration(
+                    color: Colors.white.withOpacity(0.05),
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(color: Colors.white.withOpacity(0.1)),
+                  ),
+                  child: Column(
+                    children: [
+                      Row(
+                        children: [
+                          const Icon(Icons.local_fire_department, color: Colors.orange, size: 28),
+                          const SizedBox(width: 12),
+                          const Text(
+                            'Ежедневный вход',
+                            style: TextStyle(
+                              fontSize: 18,
+                              fontWeight: FontWeight.bold,
+                              color: Colors.white,
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 16),
+                      LinearProgressIndicator(
+                        value: (_dailyStreak % 30) / 30,
+                        backgroundColor: Colors.white.withOpacity(0.1),
+                        valueColor: const AlwaysStoppedAnimation<Color>(Color(0xFFE94560)),
+                        minHeight: 8,
+                        borderRadius: BorderRadius.circular(4),
+                      ),
+                      const SizedBox(height: 8),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Text(
+                            '$_dailyStreak / 30 дней',
+                            style: const TextStyle(color: Colors.white70),
+                          ),
+                          Text(
+                            _getNextMilestone(_dailyStreak),
+                            style: const TextStyle(color: Color(0xFFE94560), fontWeight: FontWeight.bold),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 16),
+                      SizedBox(
+                        width: double.infinity,
+                        child: ElevatedButton(
+                          onPressed: _isLoading ? null : _doCheckin,
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: const Color(0xFFE94560),
+                            foregroundColor: Colors.white,
+                            padding: const EdgeInsets.symmetric(vertical: 14),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                          ),
+                          child: _isLoading
+                              ? const SizedBox(
+                                  height: 20,
+                                  width: 20,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                    color: Colors.white,
+                                  ),
+                                )
+                              : const Text(
+                                  'Забрать бонусы!',
+                                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                                ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ).animate().fadeIn().slideX(begin: -0.2),
+                const SizedBox(height: 20),
+
+                // Быстрые действия
+                const Text(
+                  'Игровые механики',
+                  style: TextStyle(
+                    fontSize: 20,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.white,
+                  ),
+                ),
+                const SizedBox(height: 12),
+                GridView.count(
+                  shrinkWrap: true,
+                  physics: const NeverScrollableScrollPhysics(),
+                  crossAxisCount: 2,
+                  crossAxisSpacing: 12,
+                  mainAxisSpacing: 12,
+                  childAspectRatio: 1.3,
+                  children: [
+                    _buildActionCard(
+                      icon: Icons.flag,
+                      title: 'Квесты',
+                      subtitle: 'Выполняй задания',
+                      color: const Color(0xFF4CAF50),
+                      onTap: () {},
+                    ),
+                    _buildActionCard(
+                      icon: Icons.casino,
+                      title: 'Колесо',
+                      subtitle: 'Крути и выигрывай',
+                      color: const Color(0xFF9C27B0),
+                      onTap: () {},
+                    ),
+                    _buildActionCard(
+                      icon: Icons.store,
+                      title: 'Призы',
+                      subtitle: 'Трать бонусы',
+                      color: const Color(0xFFFF9800),
+                      onTap: () {},
+                    ),
+                    _buildActionCard(
+                      icon: Icons.emoji_events,
+                      title: 'Лидерборд',
+                      subtitle: 'Топ игроков',
+                      color: const Color(0xFF2196F3),
+                      onTap: () {},
+                    ),
+                  ],
+                ),
+              ],
             ),
           ),
-        );
-      },
+        ),
+      ),
     );
   }
 
@@ -317,14 +310,6 @@ class _HomeScreenState extends State<HomeScreen> {
         ),
       ),
     );
-  }
-
-  void _goToTab(int index) {
-    Navigator.pushReplacement(
-      context,
-      MaterialPageRoute(builder: (_) => const MainScreen()),
-    );
-    // Нужно было бы передать индекс, но для простоты
   }
 
   String _getLeagueName(double balance) {
