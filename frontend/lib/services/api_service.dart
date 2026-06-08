@@ -6,7 +6,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../models/models.dart';
 
 class ApiService {
-  static const String baseUrl = 'https://constantly-purifying-skimmer.cloudpub.ru';
+  static const String baseUrl = 'https://ungraciously-good-vicuna.cloudpub.ru';
 
   static String? _token;
 
@@ -29,7 +29,8 @@ class ApiService {
     await prefs.remove('token');
   }
 
-  static Map<String, String> get _headers {
+  static Future<Map<String, String>> _getHeaders() async {
+    await loadToken();
     return {
       'Content-Type': 'application/json',
       'User-Agent': 'SKSQuest/1.0 (Android)',
@@ -43,7 +44,7 @@ class ApiService {
     developer.log('GET $url');
     try {
       final response = await http
-          .get(Uri.parse(url), headers: _headers)
+          .get(Uri.parse(url), headers: await _getHeaders())
           .timeout(const Duration(seconds: 15));
       developer.log('Status: ${response.statusCode}');
       return response;
@@ -60,14 +61,18 @@ class ApiService {
   }
 
   // Универсальный POST с обработкой ошибок
-  static Future<http.Response> _post(String path, {dynamic body, Map<String, String>? headers}) async {
+  static Future<http.Response> _post(
+    String path, {
+    dynamic body,
+    Map<String, String>? headers,
+  }) async {
     final url = '$baseUrl$path';
     developer.log('POST $url');
     try {
       final response = await http
           .post(
             Uri.parse(url),
-            headers: headers ?? _headers,
+            headers: headers ?? await _getHeaders(),
             body: body,
           )
           .timeout(const Duration(seconds: 15));
@@ -111,13 +116,15 @@ class ApiService {
     required String password,
     String? fullName,
   }) async {
-    final response = await _post('/api/auth/register',
-        body: jsonEncode({
-          'username': username,
-          'email': email,
-          'password': password,
-          if (fullName != null) 'full_name': fullName,
-        }));
+    final response = await _post(
+      '/api/auth/register',
+      body: jsonEncode({
+        'username': username,
+        'email': email,
+        'password': password,
+        if (fullName != null) 'full_name': fullName,
+      }),
+    );
     return _handleResponse(response);
   }
 
@@ -125,16 +132,18 @@ class ApiService {
     required String username,
     required String password,
   }) async {
-    final response = await _post('/api/auth/login',
-        headers: {
-          'Content-Type': 'application/x-www-form-urlencoded',
-          'User-Agent': 'SKSQuest/1.0 (Android)',
-        },
-        body: {
-          'username': username,
-          'password': password,
-          'grant_type': 'password',
-        });
+    final response = await _post(
+      '/api/auth/login',
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded',
+        'User-Agent': 'SKSQuest/1.0 (Android)',
+      },
+      body: {
+        'username': username,
+        'password': password,
+        'grant_type': 'password',
+      },
+    );
     final data = _handleResponse(response);
     if (data.containsKey('access_token')) {
       await saveToken(data['access_token']);
@@ -170,8 +179,10 @@ class ApiService {
   }
 
   static Future<Map<String, dynamic>> completeQuest(int questId) async {
-    final response = await _post('/api/quests/complete',
-        body: jsonEncode({'quest_id': questId}));
+    final response = await _post(
+      '/api/quests/complete',
+      body: jsonEncode({'quest_id': questId}),
+    );
     return _handleResponse(response);
   }
 
@@ -204,8 +215,10 @@ class ApiService {
   }
 
   static Future<Map<String, dynamic>> redeemPrize(int prizeId) async {
-    final response = await _post('/api/marketplace/redeem',
-        body: jsonEncode({'prize_id': prizeId}));
+    final response = await _post(
+      '/api/marketplace/redeem',
+      body: jsonEncode({'prize_id': prizeId}),
+    );
     return _handleResponse(response);
   }
 
@@ -234,7 +247,7 @@ class ApiService {
     return _handleResponse(response);
   }
 
-  // --- ОЦЕНЩИК (GUESS PRICE) ---
+  // --- ОЦЕНЩИК ---
 
   static Future<GuessPriceSession> startGuessPrice() async {
     final response = await _post('/api/guess-price/start');
@@ -253,19 +266,23 @@ class ApiService {
     required int itemId,
     required int guess,
   }) async {
-    final response = await _post('/api/guess-price/guess',
-        body: jsonEncode({
-          'session_id': sessionId,
-          'item_id': itemId,
-          'guess': guess,
-        }));
+    final response = await _post(
+      '/api/guess-price/guess',
+      body: jsonEncode({
+        'session_id': sessionId,
+        'item_id': itemId,
+        'guess': guess,
+      }),
+    );
     final data = _handleResponse(response);
     return GuessPriceResult.fromJson(data);
   }
 
   static Future<GuessPriceSession> finishGuessPrice(int sessionId) async {
-    final response = await _post('/api/guess-price/finish',
-        body: jsonEncode({'session_id': sessionId}));
+    final response = await _post(
+      '/api/guess-price/finish',
+      body: jsonEncode({'session_id': sessionId}),
+    );
     final data = _handleResponse(response);
     return GuessPriceSession.fromJson(data);
   }

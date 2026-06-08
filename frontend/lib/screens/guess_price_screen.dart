@@ -1,4 +1,3 @@
-import 'dart:math';
 import 'package:flutter/material.dart';
 import '../services/api_service.dart';
 import '../models/models.dart';
@@ -91,34 +90,24 @@ class _GuessPriceScreenState extends State<GuessPriceScreen> with TickerProvider
 
     int coinsEarned;
     String tier;
-    String icon;
     String message;
-    Color resultColor;
 
     if (accuracyPercent <= 5) {
       coinsEarned = 200;
       tier = 'exact';
-      icon = '🎯';
       message = 'Точное попадание!';
-      resultColor = const Color(0xFF4CAF50);
     } else if (accuracyPercent <= 15) {
       coinsEarned = 100;
       tier = 'close';
-      icon = '👍';
       message = 'Близко!';
-      resultColor = const Color(0xFFFF9800);
     } else if (accuracyPercent <= 30) {
       coinsEarned = 30;
       tier = 'miss';
-      icon = '📉';
       message = 'Мимо...';
-      resultColor = const Color(0xFFE94560);
     } else {
       coinsEarned = 0;
       tier = 'far';
-      icon = '❌';
       message = 'Далеко от цены';
-      resultColor = const Color(0xFFE94560);
     }
 
     if (coinsEarned >= 100) _hits++;
