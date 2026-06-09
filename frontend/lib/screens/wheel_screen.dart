@@ -1,8 +1,7 @@
-import 'dart:math' as math;
 import 'package:flutter/material.dart';
-import 'package:flutter_animate/flutter_animate.dart';
+import 'package:provider/provider.dart';
+import '../providers/user_provider.dart';
 import '../services/api_service.dart';
-import '../models/models.dart';
 
 class WheelScreen extends StatefulWidget {
   const WheelScreen({super.key});
@@ -11,22 +10,13 @@ class WheelScreen extends StatefulWidget {
   State<WheelScreen> createState() => _WheelScreenState();
 }
 
-class _WheelScreenState extends State<WheelScreen> with TickerProviderStateMixin {
-  double _rotation = 0;
-  bool _isSpinning = false;
+class _WheelScreenState extends State<WheelScreen> {
   Map<String, dynamic>? _spinsInfo;
-  String? _result;
-
-  final List<Map<String, dynamic>> _prizes = [
-    {'label': '10', 'color': const Color(0xFFE94560), 'value': 10},
-    {'label': '25', 'color': const Color(0xFF9C27B0), 'value': 25},
-    {'label': '50', 'color': const Color(0xFF2196F3), 'value': 50},
-    {'label': '100', 'color': const Color(0xFF4CAF50), 'value': 100},
-    {'label': '500', 'color': const Color(0xFFFF9800), 'value': 500},
-    {'label': '5%', 'color': const Color(0xFF00BCD4), 'value': 0, 'type': 'discount'},
-    {'label': '🎖', 'color': const Color(0xFF607D8B), 'value': 0, 'type': 'badge'},
-    {'label': '25', 'color': const Color(0xFF9C27B0), 'value': 25},
-  ];
+  bool _isLoading = true;
+  bool _isOpening = false;
+  int _openedCount = 0;
+  List<Map<String, dynamic>?> _chestResults = [null, null, null];
+  int _currentlyOpeningIndex = -1;
 
   @override
   void initState() {
@@ -37,59 +27,65 @@ class _WheelScreenState extends State<WheelScreen> with TickerProviderStateMixin
   Future<void> _loadSpinsInfo() async {
     try {
       final info = await ApiService.getSpinsInfo();
-      setState(() => _spinsInfo = info);
-    } catch (_) {}
+      if (mounted) {
+        setState(() {
+          _spinsInfo = info;
+          _isLoading = false;
+        });
+      }
+    } catch (_) {
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
+    }
   }
 
-  Future<void> _spin({bool free = true}) async {
-    if (_isSpinning) return;
-    setState(() => _isSpinning = true);
+  Future<void> _openChest(int index) async {
+    if (_isOpening) return;
+    if (_chestResults[index] != null) return;
+    if (_openedCount >= 3) return;
+
+    final isFirstChest = _openedCount == 0;
+    final isPaidChest = _openedCount >= 1;
+
+    if (isPaidChest) {
+      final cost = _spinsInfo?['spin_cost'] ?? 50;
+      final user = context.read<UserProvider>().user;
+      if ((user?.bonusBalance ?? 0) < cost) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Недостаточно бонусов!')),
+        );
+        return;
+      }
+    }
+
+    setState(() {
+      _isOpening = true;
+      _currentlyOpeningIndex = index;
+    });
 
     try {
-      final result = await ApiService.spinWheel(useFree: free);
-
-      // Анимация вращения
-      final randomAngle = math.pi * 2 * (5 + math.Random().nextDouble() * 5);
-      setState(() => _rotation += randomAngle);
-
-      await Future.delayed(const Duration(seconds: 3));
+      final result = await ApiService.spinWheel(useFree: isFirstChest);
 
       if (mounted) {
         setState(() {
-          _isSpinning = false;
-          _result = result.prizeType == 'bonus'
-              ? 'Вы выиграли ${result.prizeValue.toInt()} бонусов!'
-              : result.prizeType == 'discount'
-                  ? 'Скидка ${result.prizeValue.toInt()}% на следующий ЗБ!'
-                  : 'Редкий бейдж!';
+          _chestResults[index] = {
+            'prizeType': result.prizeType,
+            'prizeValue': result.prizeValue,
+          };
+          _openedCount++;
+          _isOpening = false;
+          _currentlyOpeningIndex = -1;
         });
 
-        showDialog(
-          context: context,
-          builder: (_) => AlertDialog(
-            backgroundColor: const Color(0xFF16213E),
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-            title: const Text('🎰 Результат!', style: TextStyle(color: Colors.white)),
-            content: Text(
-              _result!,
-              style: const TextStyle(color: Colors.white, fontSize: 18),
-              textAlign: TextAlign.center,
-            ),
-            actions: [
-              TextButton(
-                onPressed: () {
-                  Navigator.pop(context);
-                  _loadSpinsInfo();
-                },
-                child: const Text('OK', style: TextStyle(color: Color(0xFFE94560))),
-              ),
-            ],
-          ),
-        );
+        _showRewardDialog(result);
       }
     } catch (e) {
       if (mounted) {
-        setState(() => _isSpinning = false);
+        setState(() {
+          _isOpening = false;
+          _currentlyOpeningIndex = -1;
+        });
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text(e.toString().replaceAll('Exception: ', ''))),
         );
@@ -97,192 +93,93 @@ class _WheelScreenState extends State<WheelScreen> with TickerProviderStateMixin
     }
   }
 
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Колесо фортуны'),
-        backgroundColor: const Color(0xFF1A1A2E),
-        foregroundColor: Colors.white,
-      ),
-      body: Container(
-        decoration: const BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-            colors: [Color(0xFF1A1A2E), Color(0xFF16213E)],
+  void _showRewardDialog(dynamic result) {
+    String rewardText;
+    IconData rewardIcon;
+
+    if (result.prizeType == 'bonus') {
+      rewardText = '${result.prizeValue.toInt()} БОНУСОВ';
+      rewardIcon = Icons.monetization_on;
+    } else if (result.prizeType == 'discount') {
+      rewardText = 'СКИДКА ${result.prizeValue.toInt()}%';
+      rewardIcon = Icons.percent;
+    } else {
+      rewardText = 'РЕДКИЙ БЕЙДЖ';
+      rewardIcon = Icons.emoji_events;
+    }
+
+    showDialog(
+      context: context,
+      barrierColor: Colors.black.withOpacity(0.6),
+      builder: (context) => Dialog(
+        backgroundColor: Colors.transparent,
+        elevation: 0,
+        child: Container(
+          width: 281,
+          height: 242,
+          clipBehavior: Clip.antiAlias,
+          decoration: ShapeDecoration(
+            color: Colors.black.withOpacity(0.65),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(30),
+            ),
           ),
-        ),
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.all(20),
-          child: Column(
+          child: Stack(
             children: [
-              // Колесо
-              SizedBox(
-                height: 320,
-                child: Stack(
-                  alignment: Alignment.center,
-                  children: [
-                    // Указатель
-                    Positioned(
-                      top: 0,
-                      child: Container(
-                        width: 0,
-                        height: 0,
-                        decoration: BoxDecoration(
-                          border: Border.symmetric(
-                            horizontal: BorderSide(
-                              color: const Color(0xFFE94560),
-                              width: 15,
-                            ),
-                            vertical: BorderSide(
-                              color: Colors.transparent,
-                              width: 12,
-                            ),
-                          ),
-                        ),
-                      ),
+              Positioned(
+                left: 41,
+                top: 187,
+                child: const SizedBox(
+                  width: 199,
+                  height: 25,
+                  child: Text(
+                    'НА КАРТУ ЛОЯЛЬНОСТИ',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 16,
+                      fontWeight: FontWeight.w700,
                     ),
-                    // Вращающееся колесо
-                    AnimatedBuilder(
-                      animation: Listenable.merge([]),
-                      builder: (context, child) {
-                        return Transform.rotate(
-                          angle: _rotation,
-                          child: CustomPaint(
-                            size: const Size(280, 280),
-                            painter: WheelPainter(prizes: _prizes),
-                          ),
-                        );
-                      },
-                    ),
-                    // Центр колеса
-                    Container(
-                      width: 50,
-                      height: 50,
-                      decoration: const BoxDecoration(
-                        color: Color(0xFF1A1A2E),
-                        shape: BoxShape.circle,
-                        border: Border.fromBorderSide(
-                          BorderSide(color: Color(0xFFE94560), width: 3),
-                        ),
-                      ),
-                      child: const Center(
-                        child: Text(
-                          'SKS',
-                          style: TextStyle(
-                            color: Color(0xFFE94560),
-                            fontWeight: FontWeight.bold,
-                            fontSize: 12,
-                          ),
-                        ),
-                      ),
-                    ),
-                  ],
+                  ),
                 ),
               ),
-              const SizedBox(height: 24),
-
-              // Информация о прокрутках
-              if (_spinsInfo != null) ...[
-                Container(
-                  padding: const EdgeInsets.all(16),
-                  decoration: BoxDecoration(
-                    color: Colors.white.withOpacity(0.05),
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceAround,
-                    children: [
-                      Column(
-                        children: [
-                          const Text('Бесплатная', style: TextStyle(color: Colors.white70, fontSize: 12)),
-                          Text(
-                            _spinsInfo!['free_spin_available'] == true ? '✅ Да' : '❌ Нет',
-                            style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
-                          ),
-                        ],
-                      ),
-                      Column(
-                        children: [
-                          const Text('Платные сегодня', style: TextStyle(color: Colors.white70, fontSize: 12)),
-                          Text(
-                            '${_spinsInfo!['paid_spins_today']}/${_spinsInfo!['paid_spins_remaining'] + _spinsInfo!['paid_spins_today']}',
-                            style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
-                          ),
-                        ],
-                      ),
-                      Column(
-                        children: [
-                          const Text('Стоимость', style: TextStyle(color: Colors.white70, fontSize: 12)),
-                          Text(
-                            '${_spinsInfo!['spin_cost']} бон.',
-                            style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
-                          ),
-                        ],
-                      ),
-                    ],
+              Positioned(
+                left: 57,
+                top: 159,
+                child: Text(
+                  rewardText,
+                  style: const TextStyle(
+                    color: Color(0xFFFFC800),
+                    fontSize: 24,
+                    fontWeight: FontWeight.w700,
                   ),
                 ),
-                const SizedBox(height: 16),
-              ],
-
-              // Кнопки
-              Row(
-                children: [
-                  Expanded(
-                    child: ElevatedButton(
-                      onPressed: (_isSpinning || _spinsInfo?['free_spin_available'] != true) ? null : () => _spin(free: true),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: const Color(0xFF4CAF50),
-                        foregroundColor: Colors.white,
-                        padding: const EdgeInsets.symmetric(vertical: 14),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                      ),
-                      child: const Text('Бесплатная', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: ElevatedButton(
-                      onPressed: (_isSpinning || _spinsInfo?['paid_spins_remaining'] == 0) ? null : () => _spin(free: false),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: const Color(0xFFE94560),
-                        foregroundColor: Colors.white,
-                        padding: const EdgeInsets.symmetric(vertical: 14),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                      ),
-                      child: const Text('За 50 бон.', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-                    ),
-                  ),
-                ],
               ),
-              const SizedBox(height: 24),
-
-              // Таблица вероятностей
-              const Text(
-                'Вероятности призов (прозрачность):',
-                style: TextStyle(color: Colors.white70, fontSize: 14),
+              Positioned(
+                left: 85,
+                top: 20,
+                child: Icon(
+                  rewardIcon,
+                  size: 110,
+                  color: const Color(0xFFFFC800),
+                ),
               ),
-              const SizedBox(height: 8),
-              Wrap(
-                spacing: 8,
-                runSpacing: 8,
-                alignment: WrapAlignment.center,
-                children: _prizes.map((p) {
-                  return Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                    decoration: BoxDecoration(
-                      color: p['color'].withOpacity(0.2),
-                      borderRadius: BorderRadius.circular(8),
-                      border: Border.all(color: p['color']),
-                    ),
-                    child: Text(
-                      '${p['label']} бон.',
-                      style: TextStyle(color: p['color'], fontWeight: FontWeight.bold),
-                    ),
-                  );
-                }).toList(),
+              Positioned(
+                right: 15,
+                top: 15,
+                child: GestureDetector(
+                  onTap: () {
+                    Navigator.of(context).pop();
+                    if (_openedCount >= 3) {
+                      _loadSpinsInfo();
+                      context.read<UserProvider>().refreshUser();
+                    }
+                  },
+                  child: const Icon(
+                    Icons.close,
+                    color: Colors.white54,
+                    size: 20,
+                  ),
+                ),
               ),
             ],
           ),
@@ -290,64 +187,242 @@ class _WheelScreenState extends State<WheelScreen> with TickerProviderStateMixin
       ),
     );
   }
-}
-
-class WheelPainter extends CustomPainter {
-  final List<Map<String, dynamic>> prizes;
-
-  WheelPainter({required this.prizes});
 
   @override
-  void paint(Canvas canvas, Size size) {
-    final center = Offset(size.width / 2, size.height / 2);
-    final radius = size.width / 2;
-    final sliceAngle = 2 * math.pi / prizes.length;
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: const Color(0xFF1E1E1E),
+      body: Center(
+        child: SingleChildScrollView(
+          child: Padding(
+            padding: const EdgeInsets.all(16.0),
+            child: _isLoading
+                ? const CircularProgressIndicator(color: Color(0xFFE31E24))
+                : Container(
+                    width: 390,
+                    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 30),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFE31E24),
+                      borderRadius: BorderRadius.circular(30),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withOpacity(0.3),
+                          blurRadius: 15,
+                          offset: const Offset(0, 8),
+                        ),
+                      ],
+                    ),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        // ШАПКА
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Container(
+                              width: 44,
+                              height: 44,
+                              decoration: const BoxDecoration(
+                                color: Colors.white,
+                                shape: BoxShape.circle,
+                              ),
+                              child: const Icon(Icons.star, color: Color(0xFFE31E24), size: 24),
+                            ),
+                            const SizedBox(width: 12),
+                            const Text(
+                              'SKS QUEST',
+                              style: TextStyle(
+                                fontSize: 24,
+                                fontWeight: FontWeight.w900,
+                                color: Colors.white,
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 24),
 
-    for (int i = 0; i < prizes.length; i++) {
-      final startAngle = i * sliceAngle - math.pi / 2;
+                        // ПОДЗАГОЛОВКИ
+                        const Text(
+                          'ВЫ ЗАХОДИЛИ В ИГРУ 7 ДНЕЙ ПОДРЯД',
+                          textAlign: TextAlign.center,
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w800,
+                            color: Colors.white,
+                          ),
+                        ),
+                        const SizedBox(height: 6),
+                        const Text(
+                          'ВЫБЕРИТЕ СУНДУК И ЗАБЕРИТЕ НАГРАДУ',
+                          textAlign: TextAlign.center,
+                          style: TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.w900,
+                            color: Color(0xFFFFC800),
+                          ),
+                        ),
+                        const SizedBox(height: 32),
 
-      final paint = Paint()
-        ..color = prizes[i]['color']
-        ..style = PaintingStyle.fill;
+                        // СУНДУКИ И ЗВЁЗДОЧКИ
+                        Stack(
+                          alignment: Alignment.center,
+                          children: [
+                            const Positioned(
+                              left: 10,
+                              top: -20,
+                              child: Icon(Icons.star, color: Color(0xFFFFC800), size: 32),
+                            ),
+                            const Positioned(
+                              right: 10,
+                              bottom: -20,
+                              child: Icon(Icons.star, color: Color(0xFFFFC800), size: 24),
+                            ),
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                              children: [
+                                _buildChest(0),
+                                _buildChest(1),
+                                _buildChest(2),
+                              ],
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 30),
 
-      canvas.drawArc(
-        Rect.fromCircle(center: center, radius: radius),
-        startAngle,
-        sliceAngle,
-        true,
-        paint,
-      );
-
-      // Текст
-      canvas.save();
-      canvas.translate(center.dx, center.dy);
-      canvas.rotate(startAngle + sliceAngle / 2);
-
-      final textPainter = TextPainter(
-        text: TextSpan(
-          text: prizes[i]['label'],
-          style: const TextStyle(
-            color: Colors.white,
-            fontSize: 16,
-            fontWeight: FontWeight.bold,
+                        // ИНФОРМАЦИЯ О СУНДУКАХ
+                        if (_spinsInfo != null)
+                          Container(
+                            padding: const EdgeInsets.all(12),
+                            decoration: BoxDecoration(
+                              color: Colors.white.withOpacity(0.15),
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            child: Column(
+                              children: [
+                                Text(
+                                  _openedCount == 0
+                                      ? '1-й сундук — бесплатно!'
+                                      : _openedCount < 3
+                                          ? 'Открыто: $_openedCount / 3'
+                                          : 'Все сундуки открыты! 🎉',
+                                  style: const TextStyle(
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w700,
+                                    color: Colors.white,
+                                  ),
+                                ),
+                                if (_openedCount >= 1 && _openedCount < 3)
+                                  Padding(
+                                    padding: const EdgeInsets.only(top: 4),
+                                    child: Text(
+                                      'Следующий сундук: ${_spinsInfo!['spin_cost'] ?? 50} бонусов',
+                                      style: const TextStyle(
+                                        fontSize: 10,
+                                        color: Colors.white70,
+                                      ),
+                                    ),
+                                  ),
+                              ],
+                            ),
+                          ),
+                      ],
+                    ),
+                  ),
           ),
         ),
-        textDirection: TextDirection.ltr,
-      );
-      textPainter.layout();
-      textPainter.paint(canvas, Offset(radius * 0.6 - textPainter.width / 2, -textPainter.height / 2));
-
-      canvas.restore();
-    }
-
-    // Обводка
-    final borderPaint = Paint()
-      ..color = Colors.white.withOpacity(0.3)
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 2;
-    canvas.drawCircle(center, radius, borderPaint);
+      ),
+    );
   }
 
-  @override
-  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
+  Widget _buildChest(int index) {
+    final isOpened = _chestResults[index] != null;
+    final canOpen = !isOpened && !_isOpening && _openedCount < 3;
+    final isOpeningThis = _currentlyOpeningIndex == index;
+
+    return GestureDetector(
+      onTap: canOpen ? () => _openChest(index) : null,
+      child: Column(
+        children: [
+          Container(
+            width: 80,
+            height: 80,
+            decoration: BoxDecoration(
+              color: isOpened ? const Color(0xFF8B6530) : const Color(0xFF6B4226),
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(
+                color: isOpened ? Colors.amber[600]! : Colors.amber[700]!,
+                width: 3,
+              ),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.2),
+                  blurRadius: 6,
+                  offset: const Offset(0, 4),
+                ),
+              ],
+            ),
+            child: Stack(
+              alignment: Alignment.center,
+              children: [
+                Positioned(
+                  top: 0,
+                  child: Container(
+                    width: 74,
+                    height: 30,
+                    decoration: BoxDecoration(
+                      color: isOpened ? const Color(0xFF7A5828) : const Color(0xFF5C3820),
+                      borderRadius: const BorderRadius.only(
+                        topLeft: Radius.circular(12),
+                        topRight: Radius.circular(12),
+                      ),
+                    ),
+                  ),
+                ),
+                if (isOpened)
+                  const Icon(
+                    Icons.check_circle,
+                    size: 30,
+                    color: Color(0xFFFFC800),
+                  )
+                else if (isOpeningThis)
+                  const SizedBox(
+                    width: 20,
+                    height: 20,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      color: Color(0xFFFFC800),
+                    ),
+                  )
+                else
+                  Container(
+                    width: 18,
+                    height: 18,
+                    decoration: const BoxDecoration(
+                      color: Color(0xFFFFC800),
+                      shape: BoxShape.circle,
+                    ),
+                    child: const Center(
+                      child: Icon(Icons.lock, size: 10, color: Colors.black),
+                    ),
+                  ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            isOpened
+                ? 'Открыт!'
+                : (_openedCount == 0)
+                    ? 'Бесплатно'
+                    : 'За 50 бон.',
+            style: TextStyle(
+              fontSize: 10,
+              fontWeight: FontWeight.bold,
+              color: isOpened ? const Color(0xFFFFC800) : Colors.white70,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
 }

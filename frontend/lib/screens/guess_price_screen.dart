@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+import '../providers/user_provider.dart';
 import '../services/api_service.dart';
 import '../models/models.dart';
 
@@ -9,17 +11,17 @@ class GuessPriceScreen extends StatefulWidget {
   State<GuessPriceScreen> createState() => _GuessPriceScreenState();
 }
 
-class _GuessPriceScreenState extends State<GuessPriceScreen> with TickerProviderStateMixin {
+class _GuessPriceScreenState extends State<GuessPriceScreen> {
   static const int totalRounds = 5;
 
   int _currentRound = 0;
-  int _coins = 0;
-  int _earned = 0;
-  int _hits = 0;
-  int _sliderValue = 0;
+  double _currentValue = 35000;
+  double _minValue = 10000;
+  double _maxValue = 60000;
   bool _isLoading = false;
   bool _showResult = false;
-  GuessPriceResult? _lastResult;
+  int _earned = 0;
+  int _hits = 0;
   GuessPriceSession? _session;
   List<GuessPriceItem> _items = [];
 
@@ -36,7 +38,6 @@ class _GuessPriceScreenState extends State<GuessPriceScreen> with TickerProvider
       _earned = 0;
       _hits = 0;
       _showResult = false;
-      _lastResult = null;
     });
 
     try {
@@ -52,10 +53,9 @@ class _GuessPriceScreenState extends State<GuessPriceScreen> with TickerProvider
         _items = _items.sublist(0, totalRounds);
       }
 
-      final user = await ApiService.getMe();
-      _coins = user.bonusBalance.toInt();
-
-      _sliderValue = ((_items[0].minPrice + _items[0].maxPrice) / 2).round();
+      _minValue = _items[0].minPrice.toDouble();
+      _maxValue = _items[0].maxPrice.toDouble();
+      _currentValue = ((_minValue + _maxValue) / 2);
 
       setState(() => _isLoading = false);
     } catch (e) {
@@ -64,7 +64,9 @@ class _GuessPriceScreenState extends State<GuessPriceScreen> with TickerProvider
       if (_items.length > totalRounds) {
         _items = _items.sublist(0, totalRounds);
       }
-      _sliderValue = ((_items[0].minPrice + _items[0].maxPrice) / 2).round();
+      _minValue = _items[0].minPrice.toDouble();
+      _maxValue = _items[0].maxPrice.toDouble();
+      _currentValue = ((_minValue + _maxValue) / 2);
       setState(() => _isLoading = false);
     }
   }
@@ -84,7 +86,7 @@ class _GuessPriceScreenState extends State<GuessPriceScreen> with TickerProvider
     setState(() => _isLoading = true);
 
     final item = _items[_currentRound];
-    final guess = _sliderValue;
+    final guess = _currentValue.toInt();
     final diff = (guess - item.realPrice).abs();
     final accuracyPercent = (diff / item.realPrice * 100).round();
 
@@ -114,19 +116,12 @@ class _GuessPriceScreenState extends State<GuessPriceScreen> with TickerProvider
     _earned += coinsEarned;
 
     try {
-      _lastResult = await ApiService.submitGuessPrice(
+      await ApiService.submitGuessPrice(
         sessionId: _session?.sessionId ?? 0,
         itemId: item.id,
         guess: guess,
       );
-    } catch (_) {
-      _lastResult = GuessPriceResult(
-        coinsEarned: coinsEarned,
-        accuracy: accuracyPercent,
-        tier: tier,
-        message: message,
-      );
-    }
+    } catch (_) {}
 
     setState(() {
       _isLoading = false;
@@ -141,9 +136,10 @@ class _GuessPriceScreenState extends State<GuessPriceScreen> with TickerProvider
       setState(() {
         _currentRound++;
         _showResult = false;
-        _lastResult = null;
         final item = _items[_currentRound];
-        _sliderValue = ((item.minPrice + item.maxPrice) / 2).round();
+        _minValue = item.minPrice.toDouble();
+        _maxValue = item.maxPrice.toDouble();
+        _currentValue = ((_minValue + _maxValue) / 2);
       });
     }
   }
@@ -153,22 +149,20 @@ class _GuessPriceScreenState extends State<GuessPriceScreen> with TickerProvider
       await ApiService.finishGuessPrice(_session?.sessionId ?? 0);
     } catch (_) {}
 
-    if (mounted) {
-      showDialog(
-        context: context,
-        barrierDismissible: false,
-        builder: (_) => _FinalDialog(
-          coins: _coins + _earned,
-          earned: _earned,
-          hits: _hits,
-          totalRounds: totalRounds,
-          onPlayAgain: () {
-            Navigator.pop(context);
-            _startGame();
-          },
-        ),
-      );
-    }
+    await context.read<UserProvider>().refreshUser();
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => _FinalDialog(
+        earned: _earned,
+        hits: _hits,
+        totalRounds: totalRounds,
+        onPlayAgain: () {
+          Navigator.pop(context);
+          _startGame();
+        },
+      ),
+    );
   }
 
   String _fmt(int n) => n.toString().replaceAllMapped(
@@ -178,249 +172,263 @@ class _GuessPriceScreenState extends State<GuessPriceScreen> with TickerProvider
 
   @override
   Widget build(BuildContext context) {
+    final user = context.watch<UserProvider>().user;
+    final balance = user?.bonusBalance.toInt() ?? 0;
+
     if (_isLoading && _items.isEmpty) {
       return Scaffold(
-        backgroundColor: const Color(0xFF1A1A2E),
+        backgroundColor: const Color(0xFFF6F6F6),
         body: Center(
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              const Icon(Icons.search, size: 60, color: Color(0xFFE94560)),
+              const Icon(Icons.search, size: 60, color: Color(0xFFE31E24)),
               const SizedBox(height: 24),
-              const CircularProgressIndicator(color: Color(0xFFE94560)),
+              const CircularProgressIndicator(color: Color(0xFFE31E24)),
               const SizedBox(height: 16),
-              const Text('Загрузка...', style: TextStyle(color: Colors.white70)),
+              const Text('Загрузка...', style: TextStyle(color: Color(0xFF808080))),
             ],
           ),
         ),
       );
     }
 
+    if (_items.isEmpty) {
+      return Scaffold(
+        backgroundColor: const Color(0xFFF6F6F6),
+        body: const Center(child: Text('Нет данных для игры')),
+      );
+    }
+
     final item = _items[_currentRound];
 
     return Scaffold(
-      backgroundColor: const Color(0xFF1A1A2E),
-      appBar: AppBar(
-        title: const Text('Оценщик'),
-        backgroundColor: const Color(0xFF1D3557),
-        foregroundColor: Colors.white,
-        actions: [
-          Padding(
-            padding: const EdgeInsets.only(right: 16),
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-              decoration: BoxDecoration(
-                color: Colors.white.withOpacity(0.13),
-                borderRadius: BorderRadius.circular(20),
-              ),
-              child: Row(
+      backgroundColor: const Color(0xFFF6F6F6),
+      body: SafeArea(
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
+                  Row(
+                    children: [
+                      Container(
+                        width: 40,
+                        height: 40,
+                        decoration: const BoxDecoration(
+                          color: Color(0xFFE31E24),
+                          shape: BoxShape.circle,
+                        ),
+                        child: const Icon(Icons.videogame_asset_outlined, color: Colors.white, size: 22),
+                      ),
+                      const SizedBox(width: 12),
+                      const Text(
+                        'SKS QUEST',
+                        style: TextStyle(
+                          fontSize: 20,
+                          fontWeight: FontWeight.w800,
+                          color: Colors.black,
+                        ),
+                      ),
+                    ],
+                  ),
                   Container(
-                    width: 16,
-                    height: 16,
-                    decoration: const BoxDecoration(
-                      color: Color(0xFFFAEEDA),
-                      shape: BoxShape.circle,
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      border: Border.all(color: const Color(0xFFB3B3B3)),
+                      borderRadius: BorderRadius.circular(20),
                     ),
-                    child: const Center(
-                      child: Text('₽', style: TextStyle(fontSize: 9, fontWeight: FontWeight.bold, color: Color(0xFF633806))),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Icon(Icons.diamond_outlined, size: 16, color: Colors.black),
+                        const SizedBox(width: 6),
+                        Text(
+                          _fmt(balance),
+                          style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w800, color: Colors.black),
+                        ),
+                      ],
                     ),
                   ),
-                  const SizedBox(width: 6),
-                  Text('${_fmt(_coins)}', style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.w500)),
                 ],
               ),
-            ),
-          ),
-        ],
-      ),
-      body: Container(
-        decoration: const BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-            colors: [Color(0xFF1A1A2E), Color(0xFF16213E)],
-          ),
-        ),
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.all(16),
-          child: Column(
-            children: [
-              // Progress dots
+              const SizedBox(height: 24),
+
               Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Expanded(
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                      children: List.generate(totalRounds, (i) {
-                        Color dotColor;
-                        if (i < _currentRound || (_showResult && i == _currentRound)) {
-                          dotColor = const Color(0xFF4CAF50);
-                        } else if (i == _currentRound) {
-                          dotColor = const Color(0xFF1D3557);
-                        } else {
-                          dotColor = Colors.white.withOpacity(0.2);
-                        }
-                        return Container(
-                          width: 10,
-                          height: 10,
-                          decoration: BoxDecoration(
-                            color: dotColor,
-                            shape: BoxShape.circle,
-                          ),
-                        );
-                      }),
-                    ),
+                  Row(
+                    children: List.generate(totalRounds, (index) {
+                      return Container(
+                        margin: const EdgeInsets.only(right: 8),
+                        width: 10,
+                        height: 10,
+                        decoration: BoxDecoration(
+                          color: index < _currentRound || (_showResult && index == _currentRound)
+                              ? const Color(0xFFE31E24)
+                              : const Color(0xFFD9D9D9),
+                          shape: BoxShape.circle,
+                        ),
+                      );
+                    }),
                   ),
-                  const SizedBox(width: 8),
                   Text(
                     'Раунд ${_currentRound + 1} / $totalRounds',
-                    style: const TextStyle(color: Colors.white70, fontSize: 12),
+                    style: const TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w700,
+                      color: Color(0xFFB3B3B3),
+                    ),
                   ),
                 ],
               ),
               const SizedBox(height: 16),
 
-              // Item card
               Container(
-                padding: const EdgeInsets.all(20),
+                width: double.infinity,
+                padding: const EdgeInsets.all(24),
                 decoration: BoxDecoration(
-                  color: Colors.white.withOpacity(0.05),
-                  borderRadius: BorderRadius.circular(16),
-                  border: Border.all(color: Colors.white.withOpacity(0.1)),
+                  color: const Color(0xFFD9D9D9).withOpacity(0.5),
+                  borderRadius: BorderRadius.circular(30),
                 ),
                 child: Column(
                   children: [
-                    Text(item.emoji, style: const TextStyle(fontSize: 56)),
-                    const SizedBox(height: 8),
+                    Text(
+                      item.emoji,
+                      style: const TextStyle(fontSize: 80),
+                    ),
+                    const SizedBox(height: 16),
                     Text(
                       item.name,
-                      style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w500),
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      item.description,
-                      style: const TextStyle(color: Colors.white70, fontSize: 12),
                       textAlign: TextAlign.center,
+                      style: const TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.w800,
+                        color: Colors.black,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                      decoration: BoxDecoration(
+                        color: Colors.black54,
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Text(
+                        item.description,
+                        textAlign: TextAlign.center,
+                        style: const TextStyle(
+                          fontSize: 10,
+                          color: Colors.white,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
                     ),
                   ],
                 ),
               ),
-              const SizedBox(height: 16),
+              const SizedBox(height: 30),
 
               if (!_showResult) ...[
-                // Slider
-                Container(
-                  padding: const EdgeInsets.all(16),
-                  decoration: BoxDecoration(
-                    color: Colors.white.withOpacity(0.05),
-                    borderRadius: BorderRadius.circular(16),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text('${_fmt(_minValue.toInt())} ₽', style: const TextStyle(color: Color(0xFFB3B3B3), fontWeight: FontWeight.bold)),
+                    Text('${_fmt(_maxValue.toInt())} ₽', style: const TextStyle(color: Color(0xFFB3B3B3), fontWeight: FontWeight.bold)),
+                  ],
+                ),
+                SliderTheme(
+                  data: SliderTheme.of(context).copyWith(
+                    activeTrackColor: const Color(0xFFE31E24),
+                    inactiveTrackColor: const Color(0xFFD9D9D9),
+                    thumbColor: Colors.white,
+                    overlayColor: const Color(0x29E31E24),
+                    thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 12.0),
+                    trackHeight: 6.0,
                   ),
-                  child: Column(
-                    children: [
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          Text('${_fmt(item.minPrice)} ₽', style: const TextStyle(color: Colors.white70, fontSize: 11)),
-                          Text('${_fmt(item.maxPrice)} ₽', style: const TextStyle(color: Colors.white70, fontSize: 11)),
-                        ],
-                      ),
-                      SliderTheme(
-                        data: SliderThemeData(
-                          activeTrackColor: const Color(0xFFE94560),
-                          inactiveTrackColor: Colors.white.withOpacity(0.2),
-                          thumbColor: const Color(0xFFE94560),
-                          overlayColor: const Color(0xFFE94560).withOpacity(0.2),
-                          trackHeight: 6,
-                          thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 12),
-                        ),
-                        child: Slider(
-                          value: _sliderValue.toDouble(),
-                          min: item.minPrice.toDouble(),
-                          max: item.maxPrice.toDouble(),
-                          divisions: (item.maxPrice - item.minPrice) ~/ 100,
-                          onChanged: (val) {
-                            setState(() => _sliderValue = val.round());
-                          },
-                        ),
-                      ),
-                      const SizedBox(height: 8),
-                      Text(
-                        '${_fmt(_sliderValue)} ₽',
-                        style: const TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.w500),
-                      ),
-                      const SizedBox(height: 4),
-                      const Text(
-                        'ваша оценка залога',
-                        style: TextStyle(color: Colors.white70, fontSize: 12),
-                      ),
-                    ],
+                  child: Slider(
+                    value: _currentValue,
+                    min: _minValue,
+                    max: _maxValue,
+                    onChanged: (value) {
+                      setState(() => _currentValue = value);
+                    },
                   ),
                 ),
                 const SizedBox(height: 16),
-
-                // Energy bar
-                LinearProgressIndicator(
-                  value: _currentRound / totalRounds,
-                  backgroundColor: Colors.white.withOpacity(0.1),
-                  valueColor: const AlwaysStoppedAnimation<Color>(Color(0xFF1D3557)),
-                  minHeight: 5,
-                  borderRadius: BorderRadius.circular(4),
+                Text(
+                  '${_fmt(_currentValue.toInt())} ₽',
+                  style: const TextStyle(
+                    fontSize: 32,
+                    fontWeight: FontWeight.w800,
+                    color: Colors.black,
+                  ),
                 ),
-                const SizedBox(height: 16),
-
-                // Confirm button
-                SizedBox(
-                  width: double.infinity,
-                  child: ElevatedButton(
-                    onPressed: _isLoading ? null : _confirmGuess,
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: const Color(0xFF1D3557),
-                      foregroundColor: Colors.white,
-                      padding: const EdgeInsets.symmetric(vertical: 14),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                const SizedBox(height: 4),
+                const Text(
+                  'Ваша оценка залога',
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w700,
+                    color: Color(0xFFB3B3B3),
+                  ),
+                ),
+                const SizedBox(height: 30),
+                GestureDetector(
+                  onTap: _isLoading ? null : _confirmGuess,
+                  child: Container(
+                    width: double.infinity,
+                    height: 50,
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFF2D2D3),
+                      borderRadius: BorderRadius.circular(25),
                     ),
-                    child: _isLoading
-                        ? const SizedBox(
-                            height: 20,
-                            width: 20,
-                            child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
-                          )
-                        : const Row(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              Icon(Icons.check),
-                              SizedBox(width: 8),
-                              Text('Подтвердить оценку', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w500)),
-                            ],
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        const Icon(Icons.check_circle_outline, color: Color(0xFFE31E24)),
+                        const SizedBox(width: 8),
+                        Text(
+                          'Подтвердить оценку',
+                          style: const TextStyle(
+                            color: Color(0xFFE31E24),
+                            fontSize: 14,
+                            fontWeight: FontWeight.w800,
                           ),
+                        ),
+                      ],
+                    ),
                   ),
                 ),
-              ] else if (_lastResult != null) ...[
-                // Result banner
+              ] else ...[
                 Container(
                   padding: const EdgeInsets.all(16),
                   decoration: BoxDecoration(
-                    color: _getResultBgColor(_lastResult!.tier),
+                    color: _getResultBgColor(_getTier(item)),
                     borderRadius: BorderRadius.circular(16),
                   ),
                   child: Row(
                     children: [
-                      Text(_getResultIcon(_lastResult!.tier), style: const TextStyle(fontSize: 28)),
+                      Text(_getResultIcon(_getTier(item)), style: const TextStyle(fontSize: 28)),
                       const SizedBox(width: 12),
                       Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(
-                            _lastResult!.message,
-                            style: const TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w500),
+                            _getResultMessage(_getTier(item)),
+                            style: const TextStyle(color: Colors.black, fontSize: 14, fontWeight: FontWeight.w800),
                           ),
                           const SizedBox(height: 2),
                           Text(
-                            '+${_lastResult!.coinsEarned} монет',
+                            '+${_getResultCoins(_getTier(item))} бонусов',
                             style: TextStyle(
-                              color: _lastResult!.coinsEarned > 0 ? const Color(0xFF4CAF50) : Colors.white70,
+                              color: _getResultCoins(_getTier(item)) > 0 ? const Color(0xFF4CAF50) : const Color(0xFFB3B3B3),
                               fontSize: 12,
+                              fontWeight: FontWeight.w700,
                             ),
                           ),
                         ],
@@ -429,22 +437,21 @@ class _GuessPriceScreenState extends State<GuessPriceScreen> with TickerProvider
                   ),
                 ),
                 const SizedBox(height: 16),
-
-                // Answer comparison
                 Row(
                   children: [
                     Expanded(
                       child: Container(
                         padding: const EdgeInsets.all(12),
                         decoration: BoxDecoration(
-                          color: Colors.white.withOpacity(0.05),
+                          color: Colors.white,
                           borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: const Color(0xFFD9D9D9)),
                         ),
                         child: Column(
                           children: [
-                            const Text('Ваша оценка', style: TextStyle(color: Colors.white70, fontSize: 11)),
+                            const Text('Ваша оценка', style: TextStyle(color: Color(0xFFB3B3B3), fontSize: 11, fontWeight: FontWeight.w700)),
                             const SizedBox(height: 4),
-                            Text('${_fmt(_sliderValue)} ₽', style: const TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.w500)),
+                            Text('${_fmt(_currentValue.toInt())} ₽', style: const TextStyle(color: Colors.black, fontSize: 15, fontWeight: FontWeight.w800)),
                           ],
                         ),
                       ),
@@ -454,50 +461,35 @@ class _GuessPriceScreenState extends State<GuessPriceScreen> with TickerProvider
                       child: Container(
                         padding: const EdgeInsets.all(12),
                         decoration: BoxDecoration(
-                          color: Colors.white.withOpacity(0.05),
+                          color: Colors.white,
                           borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: const Color(0xFFD9D9D9)),
                         ),
                         child: Column(
                           children: [
-                            const Text('Реальная цена', style: TextStyle(color: Colors.white70, fontSize: 11)),
+                            const Text('Реальная цена', style: TextStyle(color: Color(0xFFB3B3B3), fontSize: 11, fontWeight: FontWeight.w700)),
                             const SizedBox(height: 4),
-                            Text('${_fmt(item.realPrice)} ₽', style: const TextStyle(color: Color(0xFF4CAF50), fontSize: 15, fontWeight: FontWeight.w500)),
+                            Text('${_fmt(item.realPrice)} ₽', style: const TextStyle(color: Color(0xFF4CAF50), fontSize: 15, fontWeight: FontWeight.w800)),
                           ],
                         ),
                       ),
                     ),
                   ],
                 ),
-                const SizedBox(height: 8),
-
-                // Deviation
-                Text(
-                  'Отклонение: ${_fmt((_sliderValue - item.realPrice).abs())} ₽ (${_lastResult!.accuracy}%)',
-                  style: TextStyle(
-                    color: _lastResult!.accuracy <= 15 ? const Color(0xFF4CAF50) : const Color(0xFFE94560),
-                    fontSize: 12,
-                  ),
-                ),
                 const SizedBox(height: 16),
-
-                // Next button
                 SizedBox(
                   width: double.infinity,
+                  height: 50,
                   child: ElevatedButton(
                     onPressed: _nextRound,
                     style: ElevatedButton.styleFrom(
-                      backgroundColor: const Color(0xFF1D3557),
+                      backgroundColor: const Color(0xFFE31E24),
                       foregroundColor: Colors.white,
-                      padding: const EdgeInsets.symmetric(vertical: 14),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(25)),
                     ),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Text(_currentRound + 1 >= totalRounds ? 'Получить результат 🏆' : 'Следующий предмет'),
-                        const SizedBox(width: 8),
-                        Icon(_currentRound + 1 >= totalRounds ? Icons.emoji_events : Icons.arrow_forward),
-                      ],
+                    child: Text(
+                      _currentRound + 1 >= totalRounds ? 'Получить результат 🏆' : 'Следующий предмет',
+                      style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w800),
                     ),
                   ),
                 ),
@@ -509,6 +501,15 @@ class _GuessPriceScreenState extends State<GuessPriceScreen> with TickerProvider
     );
   }
 
+  String _getTier(GuessPriceItem item) {
+    final diff = (_currentValue.toInt() - item.realPrice).abs();
+    final accuracyPercent = (diff / item.realPrice * 100).round();
+    if (accuracyPercent <= 5) return 'exact';
+    if (accuracyPercent <= 15) return 'close';
+    if (accuracyPercent <= 30) return 'miss';
+    return 'far';
+  }
+
   Color _getResultBgColor(String tier) {
     switch (tier) {
       case 'exact':
@@ -516,33 +517,45 @@ class _GuessPriceScreenState extends State<GuessPriceScreen> with TickerProvider
       case 'close':
         return const Color(0xFFFF9800).withOpacity(0.15);
       default:
-        return const Color(0xFFE94560).withOpacity(0.15);
+        return const Color(0xFFE31E24).withOpacity(0.15);
     }
   }
 
   String _getResultIcon(String tier) {
     switch (tier) {
-      case 'exact':
-        return '🎯';
-      case 'close':
-        return '👍';
-      case 'miss':
-        return '📉';
-      default:
-        return '❌';
+      case 'exact': return '🎯';
+      case 'close': return '👍';
+      case 'miss': return '📉';
+      default: return '❌';
+    }
+  }
+
+  String _getResultMessage(String tier) {
+    switch (tier) {
+      case 'exact': return 'Точное попадание!';
+      case 'close': return 'Близко!';
+      case 'miss': return 'Мимо...';
+      default: return 'Далеко от цены';
+    }
+  }
+
+  int _getResultCoins(String tier) {
+    switch (tier) {
+      case 'exact': return 200;
+      case 'close': return 100;
+      case 'miss': return 30;
+      default: return 0;
     }
   }
 }
 
 class _FinalDialog extends StatelessWidget {
-  final int coins;
   final int earned;
   final int hits;
   final int totalRounds;
   final VoidCallback onPlayAgain;
 
   const _FinalDialog({
-    required this.coins,
     required this.earned,
     required this.hits,
     required this.totalRounds,
@@ -570,7 +583,7 @@ class _FinalDialog extends StatelessWidget {
     }
 
     return Dialog(
-      backgroundColor: const Color(0xFF16213E),
+      backgroundColor: Colors.white,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
       child: Padding(
         padding: const EdgeInsets.all(24),
@@ -579,44 +592,42 @@ class _FinalDialog extends StatelessWidget {
           children: [
             Text(trophy, style: const TextStyle(fontSize: 52)),
             const SizedBox(height: 8),
-            Text(grade, style: const TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.w500)),
+            Text(grade, style: const TextStyle(color: Colors.black, fontSize: 20, fontWeight: FontWeight.w800)),
             const SizedBox(height: 4),
-            const Text('Игра завершена!', style: TextStyle(color: Colors.white70, fontSize: 14)),
+            const Text('Игра завершена!', style: TextStyle(color: Color(0xFF808080), fontSize: 14)),
             const SizedBox(height: 16),
-
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
               decoration: BoxDecoration(
-                color: const Color(0xFFFAEEDA),
+                color: const Color(0xFFF2D2D3),
                 borderRadius: BorderRadius.circular(16),
               ),
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  const Icon(Icons.monetization_on, color: Color(0xFFBA7517), size: 22),
+                  const Icon(Icons.diamond_outlined, color: Color(0xFFE31E24), size: 22),
                   const SizedBox(width: 8),
-                  Text('+${_fmt(earned)}', style: const TextStyle(color: Color(0xFF633806), fontSize: 26, fontWeight: FontWeight.w500)),
+                  Text('+${_fmt(earned)}', style: const TextStyle(color: Color(0xFFE31E24), fontSize: 26, fontWeight: FontWeight.w800)),
                   const SizedBox(width: 4),
-                  const Text('монет', style: TextStyle(color: Color(0xFFBA7517), fontSize: 13)),
+                  const Text('бонусов', style: TextStyle(color: Color(0xFFE31E24), fontSize: 13)),
                 ],
               ),
             ),
             const SizedBox(height: 16),
-
             Row(
               children: [
                 Expanded(
                   child: Container(
                     padding: const EdgeInsets.all(12),
                     decoration: BoxDecoration(
-                      color: Colors.white.withOpacity(0.05),
+                      color: const Color(0xFFF6F6F6),
                       borderRadius: BorderRadius.circular(12),
                     ),
                     child: Column(
                       children: [
-                        Text('$hits', style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w500)),
+                        Text('$hits', style: const TextStyle(color: Colors.black, fontSize: 18, fontWeight: FontWeight.w800)),
                         const SizedBox(height: 2),
-                        const Text('точных оценок', style: TextStyle(color: Colors.white70, fontSize: 11)),
+                        const Text('точных', style: TextStyle(color: Color(0xFF808080), fontSize: 11)),
                       ],
                     ),
                   ),
@@ -626,31 +637,14 @@ class _FinalDialog extends StatelessWidget {
                   child: Container(
                     padding: const EdgeInsets.all(12),
                     decoration: BoxDecoration(
-                      color: Colors.white.withOpacity(0.05),
+                      color: const Color(0xFFF6F6F6),
                       borderRadius: BorderRadius.circular(12),
                     ),
                     child: Column(
                       children: [
-                        Text('${totalRounds - hits}', style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w500)),
+                        Text('${totalRounds - hits}', style: const TextStyle(color: Colors.black, fontSize: 18, fontWeight: FontWeight.w800)),
                         const SizedBox(height: 2),
-                        const Text('промахов', style: TextStyle(color: Colors.white70, fontSize: 11)),
-                      ],
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Container(
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(
-                      color: Colors.white.withOpacity(0.05),
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: Column(
-                      children: [
-                        Text('${_fmt(coins)}', style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w500)),
-                        const SizedBox(height: 2),
-                        const Text('монет всего', style: TextStyle(color: Colors.white70, fontSize: 11)),
+                        const Text('промахов', style: TextStyle(color: Color(0xFF808080), fontSize: 11)),
                       ],
                     ),
                   ),
@@ -658,26 +652,25 @@ class _FinalDialog extends StatelessWidget {
               ],
             ),
             const SizedBox(height: 20),
-
             SizedBox(
               width: double.infinity,
+              height: 50,
               child: ElevatedButton(
                 onPressed: () {
                   Navigator.pop(context);
                   onPlayAgain();
                 },
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFF1D3557),
+                  backgroundColor: const Color(0xFFE31E24),
                   foregroundColor: Colors.white,
-                  padding: const EdgeInsets.symmetric(vertical: 14),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(25)),
                 ),
                 child: const Row(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
                     Icon(Icons.refresh),
                     SizedBox(width: 8),
-                    Text('Сыграть ещё раз', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w500)),
+                    Text('Сыграть ещё раз', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w800)),
                   ],
                 ),
               ),
@@ -685,20 +678,20 @@ class _FinalDialog extends StatelessWidget {
             const SizedBox(height: 8),
             SizedBox(
               width: double.infinity,
+              height: 48,
               child: OutlinedButton(
                 onPressed: () => Navigator.pop(context),
                 style: OutlinedButton.styleFrom(
-                  foregroundColor: Colors.white70,
-                  side: const BorderSide(color: Colors.white24),
-                  padding: const EdgeInsets.symmetric(vertical: 13),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                  foregroundColor: const Color(0xFF808080),
+                  side: const BorderSide(color: Color(0xFFD9D9D9)),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(25)),
                 ),
                 child: const Row(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    Icon(Icons.share),
+                    Icon(Icons.home_outlined),
                     SizedBox(width: 8),
-                    Text('Поделиться', style: TextStyle(fontSize: 14)),
+                    Text('На главную', style: TextStyle(fontSize: 14)),
                   ],
                 ),
               ),

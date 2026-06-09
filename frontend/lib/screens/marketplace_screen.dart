@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+import '../providers/user_provider.dart';
 import '../services/api_service.dart';
 import '../models/models.dart';
 
@@ -12,16 +14,6 @@ class MarketplaceScreen extends StatefulWidget {
 class _MarketplaceScreenState extends State<MarketplaceScreen> {
   List<Prize> _prizes = [];
   bool _isLoading = true;
-  String _selectedCategory = 'all';
-
-  final List<Map<String, dynamic>> _categories = [
-    {'id': 'all', 'label': 'Все', 'icon': Icons.apps},
-    {'id': 'financial', 'label': 'Финансы', 'icon': Icons.account_balance},
-    {'id': 'partner', 'label': 'Партнёры', 'icon': Icons.store},
-    {'id': 'merch', 'label': 'Мерч', 'icon': Icons.shopping_bag},
-    {'id': 'charity', 'label': 'Благотвор.', 'icon': Icons.favorite},
-    {'id': 'exclusive', 'label': 'Эксклюзив', 'icon': Icons.diamond},
-  ];
 
   @override
   void initState() {
@@ -32,20 +24,16 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
   Future<void> _loadPrizes() async {
     setState(() => _isLoading = true);
     try {
-      final prizes = await ApiService.getPrizes(
-        category: _selectedCategory == 'all' ? null : _selectedCategory,
-      );
+      final prizes = await ApiService.getPrizes();
       setState(() {
         _prizes = prizes;
         _isLoading = false;
       });
     } catch (e) {
       setState(() => _isLoading = false);
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(e.toString().replaceAll('Exception: ', ''))),
-        );
-      }
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(e.toString().replaceAll('Exception: ', ''))),
+      );
     }
   }
 
@@ -53,22 +41,25 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
     final confirm = await showDialog<bool>(
       context: context,
       builder: (_) => AlertDialog(
-        backgroundColor: const Color(0xFF16213E),
+        backgroundColor: Colors.white,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: Text('Выкупить "${prize.name}"?', style: const TextStyle(color: Colors.white)),
+        title: Text(
+          'Забрать "${prize.name}"?',
+          style: const TextStyle(color: Colors.black, fontWeight: FontWeight.bold),
+        ),
         content: Text(
           'Стоимость: ${prize.bonusCost} бонусов',
-          style: const TextStyle(color: Colors.white70),
+          style: const TextStyle(color: Colors.black87),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, false),
-            child: const Text('Отмена', style: TextStyle(color: Colors.white70)),
+            child: const Text('Отмена', style: TextStyle(color: Color(0xFF808080))),
           ),
           ElevatedButton(
             onPressed: () => Navigator.pop(context, true),
-            style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFFE94560)),
-            child: const Text('Выкупить'),
+            style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFFE31E24)),
+            child: const Text('Забрать', style: TextStyle(color: Colors.white)),
           ),
         ],
       ),
@@ -77,104 +68,135 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
     if (confirm == true) {
       try {
         final result = await ApiService.redeemPrize(prize.id);
-        if (mounted) {
-          showDialog(
-            context: context,
-            builder: (_) => AlertDialog(
-              backgroundColor: const Color(0xFF16213E),
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-              title: const Text('🎉 Приз выкуплен!', style: TextStyle(color: Colors.white)),
-              content: Text(result['message'], style: const TextStyle(color: Colors.white70)),
-              actions: [
-                TextButton(
-                  onPressed: () {
-                    Navigator.pop(context);
-                    _loadPrizes();
-                  },
-                  child: const Text('OK', style: TextStyle(color: Color(0xFFE94560))),
-                ),
-              ],
+        showDialog(
+          context: context,
+          builder: (_) => AlertDialog(
+            backgroundColor: Colors.white,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+            title: const Text(
+              '🎉 Приз получен!',
+              style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold),
             ),
-          );
-        }
+            content: Text(
+              result['message'],
+              style: const TextStyle(color: Colors.black87),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () {
+                  Navigator.pop(context);
+                  _loadPrizes();
+                  context.read<UserProvider>().refreshUser();
+                },
+                child: const Text('OK', style: TextStyle(color: Color(0xFFE31E24), fontWeight: FontWeight.bold)),
+              ),
+            ],
+          ),
+        );
       } catch (e) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text(e.toString().replaceAll('Exception: ', ''))),
-          );
-        }
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(e.toString().replaceAll('Exception: ', ''))),
+        );
       }
     }
   }
 
+  String _fmt(int n) => n.toString().replaceAllMapped(
+        RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'),
+        (Match m) => '${m[1]} ',
+      );
+
   @override
   Widget build(BuildContext context) {
+    final user = context.watch<UserProvider>().user;
+    final balance = user?.bonusBalance.toInt() ?? 0;
+
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Каталог призов'),
-        backgroundColor: const Color(0xFF1A1A2E),
-        foregroundColor: Colors.white,
-      ),
-      body: Container(
-        decoration: const BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-            colors: [Color(0xFF1A1A2E), Color(0xFF16213E)],
-          ),
-        ),
+      backgroundColor: const Color(0xFFF6F6F6),
+      body: SafeArea(
         child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Категории
-            SizedBox(
-              height: 50,
-              child: ListView.builder(
-                scrollDirection: Axis.horizontal,
-                padding: const EdgeInsets.symmetric(horizontal: 12),
-                itemCount: _categories.length,
-                itemBuilder: (context, index) {
-                  final cat = _categories[index];
-                  final isSelected = _selectedCategory == cat['id'];
-                  return Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 4),
-                    child: FilterChip(
-                      label: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Icon(cat['icon'], size: 16, color: isSelected ? Colors.white : Colors.white70),
-                          const SizedBox(width: 4),
-                          Text(cat['label'], style: TextStyle(color: isSelected ? Colors.white : Colors.white70)),
-                        ],
+            // 1. ШАПКА
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Row(
+                    children: [
+                      Container(
+                        width: 40,
+                        height: 40,
+                        decoration: const BoxDecoration(
+                          color: Color(0xFFE31E24),
+                          shape: BoxShape.circle,
+                        ),
+                        child: const Icon(Icons.person_outline, color: Colors.white, size: 22),
                       ),
-                      selected: isSelected,
-                      onSelected: (_) {
-                        setState(() => _selectedCategory = cat['id']);
-                        _loadPrizes();
-                      },
-                      backgroundColor: Colors.white.withOpacity(0.05),
-                      selectedColor: const Color(0xFFE94560),
-                      checkmarkColor: Colors.white,
+                      const SizedBox(width: 12),
+                      const Text(
+                        'SKS QUEST',
+                        style: TextStyle(
+                          fontSize: 20,
+                          fontWeight: FontWeight.w800,
+                          color: Colors.black,
+                        ),
+                      ),
+                    ],
+                  ),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      border: Border.all(color: const Color(0xFFB3B3B3)),
+                      borderRadius: BorderRadius.circular(20),
                     ),
-                  );
-                },
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Icon(Icons.diamond_outlined, size: 16, color: Colors.black),
+                        const SizedBox(width: 6),
+                        Text(
+                          _fmt(balance),
+                          style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
               ),
             ),
-            const SizedBox(height: 8),
 
-            // Список призов
+            // 2. ЗАГОЛОВОК
+            const Padding(
+              padding: EdgeInsets.symmetric(horizontal: 24),
+              child: Text(
+                'ПРИЗЫ',
+                style: TextStyle(
+                  fontSize: 20,
+                  fontWeight: FontWeight.w800,
+                  color: Colors.black,
+                ),
+              ),
+            ),
+            const SizedBox(height: 16),
+
+            // 3. СПИСОК ПРИЗОВ
             Expanded(
               child: _isLoading
-                  ? const Center(child: CircularProgressIndicator(color: Color(0xFFE94560)))
+                  ? const Center(child: CircularProgressIndicator(color: Color(0xFFE31E24)))
                   : _prizes.isEmpty
                       ? const Center(
-                          child: Text('Нет призов в этой категории', style: TextStyle(color: Colors.white70)),
+                          child: Text('Нет доступных призов', style: TextStyle(color: Color(0xFF808080))),
                         )
                       : ListView.builder(
-                          padding: const EdgeInsets.all(12),
+                          padding: const EdgeInsets.symmetric(horizontal: 24),
                           itemCount: _prizes.length,
                           itemBuilder: (context, index) {
                             final prize = _prizes[index];
-                            return _buildPrizeCard(prize);
+                            final canAfford = balance >= prize.bonusCost;
+                            return _buildPrizeCard(prize, canAfford);
                           },
                         ),
             ),
@@ -184,115 +206,97 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
     );
   }
 
-  Widget _buildPrizeCard(Prize prize) {
-    final categoryColors = {
-      'financial': const Color(0xFF4CAF50),
-      'partner': const Color(0xFF2196F3),
-      'merch': const Color(0xFFFF9800),
-      'charity': const Color(0xFFE91E63),
-      'exclusive': const Color(0xFF9C27B0),
-    };
-    final color = categoryColors[prize.category] ?? Colors.grey;
+  Widget _buildPrizeCard(Prize prize, bool canAfford) {
+    return GestureDetector(
+      onTap: canAfford ? () => _redeemPrize(prize) : null,
+      child: Container(
+        margin: const EdgeInsets.only(bottom: 10),
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: const Color(0xFFF2F2F2),
+          border: Border.all(color: const Color(0xFFD9D9D9)),
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: Row(
+          children: [
+            // Иконка в розовой коробочке
+            Container(
+              width: 40,
+              height: 40,
+              decoration: BoxDecoration(
+                color: const Color(0xFFF2D2D3),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: Icon(_getCategoryIcon(prize.category), color: Colors.black, size: 20),
+            ),
+            const SizedBox(width: 12),
 
-    return Container(
-      margin: const EdgeInsets.only(bottom: 12),
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.05),
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: color.withOpacity(0.3)),
-      ),
-      child: Row(
-        children: [
-          Container(
-            width: 56,
-            height: 56,
-            decoration: BoxDecoration(
-              color: color.withOpacity(0.2),
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: Icon(
-              _getCategoryIcon(prize.category),
-              color: color,
-              size: 28,
-            ),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  prize.name,
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontWeight: FontWeight.bold,
-                    fontSize: 15,
-                  ),
-                ),
-                if (prize.description != null) ...[
-                  const SizedBox(height: 4),
+            // Текстовая информация
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
                   Text(
-                    prize.description!,
-                    style: const TextStyle(color: Colors.white70, fontSize: 12),
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
+                    prize.name,
+                    style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.black),
                   ),
-                ],
-                const SizedBox(height: 8),
-                Row(
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFFE94560),
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: Text(
-                        '${prize.bonusCost} бонусов',
+                  const SizedBox(height: 4),
+                  if (prize.description != null)
+                    Text(
+                      prize.description!,
+                      style: const TextStyle(fontSize: 9, color: Colors.black87, fontWeight: FontWeight.bold),
+                    ),
+                  const SizedBox(height: 6),
+                  Row(
+                    children: [
+                      const Icon(Icons.circle, size: 8, color: Colors.amber),
+                      const SizedBox(width: 4),
+                      Text(
+                        '${prize.bonusCost} монет',
                         style: const TextStyle(
-                          color: Colors.white,
+                          fontSize: 9,
                           fontWeight: FontWeight.bold,
-                          fontSize: 13,
+                          color: Color(0xFFFFC800),
                         ),
                       ),
-                    ),
-                    if (prize.stockQuantity != null) ...[
-                      const SizedBox(width: 8),
-                      Text(
-                        'Осталось: ${prize.stockQuantity}',
-                        style: const TextStyle(color: Colors.white54, fontSize: 12),
-                      ),
                     ],
-                  ],
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(width: 12),
+
+            // Кнопка
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+              decoration: BoxDecoration(
+                color: canAfford ? const Color(0xFFF2D2D3) : const Color(0xFFF6F6F6),
+                border: canAfford ? null : Border.all(color: const Color(0xFFB3B3B3)),
+                borderRadius: BorderRadius.circular(40),
+              ),
+              child: Text(
+                canAfford ? 'Забрать' : 'Мало монет',
+                style: TextStyle(
+                  fontSize: 8,
+                  fontWeight: FontWeight.bold,
+                  color: canAfford ? const Color(0xFFE31E24) : const Color(0xFF808080),
                 ),
-              ],
+              ),
             ),
-          ),
-          const SizedBox(width: 8),
-          ElevatedButton(
-            onPressed: () => _redeemPrize(prize),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: color,
-              foregroundColor: Colors.white,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-            ),
-            child: const Text('Выкупить'),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
 
   IconData _getCategoryIcon(String category) {
     switch (category) {
-      case 'financial': return Icons.account_balance;
-      case 'partner': return Icons.store;
-      case 'merch': return Icons.shopping_bag;
+      case 'financial': return Icons.percent;
+      case 'partner': return Icons.card_giftcard;
+      case 'merch': return Icons.backpack_outlined;
       case 'charity': return Icons.favorite;
       case 'exclusive': return Icons.diamond;
-      default: return Icons.card_giftcard;
+      default: return Icons.store;
     }
   }
 }

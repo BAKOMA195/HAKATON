@@ -91,7 +91,7 @@ def complete_quest(
     current_user.bonus_balance += quest.bonus_reward
     
     # Записываем транзакцию
-    from models import BonusTransaction
+    from app.models import BonusTransaction
     transaction = BonusTransaction(
         user_id=current_user.id,
         amount=quest.bonus_reward,

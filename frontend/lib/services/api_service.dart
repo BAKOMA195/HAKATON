@@ -6,7 +6,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../models/models.dart';
 
 class ApiService {
-  static const String baseUrl = 'https://ungraciously-good-vicuna.cloudpub.ru';
+  static const String baseUrl = 'https://constantly-purifying-skimmer.cloudpub.ru';
 
   static String? _token;
 

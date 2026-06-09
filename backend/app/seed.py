@@ -1,7 +1,7 @@
 from sqlalchemy.orm import Session
-from database import SessionLocal, Base, engine
-from models import User, Quest, Achievement, Prize, UserRole, BonusTransaction
-from auth import get_password_hash
+from app.database import SessionLocal, Base, engine
+from app.models import User, Quest, Achievement, Prize, UserRole, BonusTransaction
+from app.auth import get_password_hash
 from datetime import datetime, timedelta
 
 

@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'home_screen.dart';
-import 'quests_screen.dart';
-import 'wheel_screen.dart';
+import 'guess_price_screen.dart';
 import 'marketplace_screen.dart';
+import 'quests_screen.dart';
 import 'leaderboard_screen.dart';
 
 class MainScreen extends StatefulWidget {
@@ -17,9 +17,9 @@ class _MainScreenState extends State<MainScreen> {
 
   final List<Widget> _screens = [
     const HomeScreen(),
-    const QuestsScreen(),
-    const WheelScreen(),
+    const GuessPriceScreen(),
     const MarketplaceScreen(),
+    const QuestsScreen(),
     const LeaderboardScreen(),
   ];
 
@@ -28,35 +28,49 @@ class _MainScreenState extends State<MainScreen> {
     return Scaffold(
       body: _screens[_currentIndex],
       bottomNavigationBar: Container(
-        decoration: BoxDecoration(
-          color: const Color(0xFF1A1A2E),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withOpacity(0.3),
-              blurRadius: 10,
-              offset: const Offset(0, -2),
-            ),
-          ],
-        ),
-        child: SafeArea(
-          child: BottomNavigationBar(
-            currentIndex: _currentIndex,
-            onTap: (index) => setState(() => _currentIndex = index),
-            type: BottomNavigationBarType.fixed,
-            backgroundColor: Colors.transparent,
-            selectedItemColor: const Color(0xFFE94560),
-            unselectedItemColor: Colors.white54,
-            selectedLabelStyle: const TextStyle(fontSize: 11),
-            unselectedLabelStyle: const TextStyle(fontSize: 11),
-            items: const [
-              BottomNavigationBarItem(icon: Icon(Icons.home), label: 'Главная'),
-              BottomNavigationBarItem(icon: Icon(Icons.flag), label: 'Квесты'),
-              BottomNavigationBarItem(icon: Icon(Icons.casino), label: 'Колесо'),
-              BottomNavigationBarItem(icon: Icon(Icons.store), label: 'Призы'),
-              BottomNavigationBarItem(icon: Icon(Icons.emoji_events), label: 'Топ'),
-            ],
+        padding: const EdgeInsets.only(top: 10, bottom: 20),
+        decoration: const BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.only(
+            topLeft: Radius.circular(20),
+            topRight: Radius.circular(20),
           ),
         ),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+          children: [
+            _buildNavItem(Icons.home, 'Главная', 0),
+            _buildNavItem(Icons.sports_esports_outlined, 'Игра', 1),
+            _buildNavItem(Icons.card_giftcard, 'Призы', 2),
+            _buildNavItem(Icons.push_pin_outlined, 'Задания', 3),
+            _buildNavItem(Icons.emoji_events_outlined, 'Рейтинг', 4),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildNavItem(IconData icon, String label, int index) {
+    final isActive = _currentIndex == index;
+    return GestureDetector(
+      onTap: () => setState(() => _currentIndex = index),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(
+            icon,
+            color: isActive ? Colors.black : const Color(0xFFB3B3B3),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            label,
+            style: TextStyle(
+              fontSize: 10,
+              fontWeight: FontWeight.bold,
+              color: isActive ? Colors.black : const Color(0xFFB3B3B3),
+            ),
+          ),
+        ],
       ),
     );
   }

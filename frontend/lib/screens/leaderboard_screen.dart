@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+import '../providers/user_provider.dart';
 import '../services/api_service.dart';
 import '../models/models.dart';
 
@@ -9,24 +11,16 @@ class LeaderboardScreen extends StatefulWidget {
   State<LeaderboardScreen> createState() => _LeaderboardScreenState();
 }
 
-class _LeaderboardScreenState extends State<LeaderboardScreen> with SingleTickerProviderStateMixin {
-  late TabController _tabController;
+class _LeaderboardScreenState extends State<LeaderboardScreen> {
   List<LeaderboardEntry> _leaderboard = [];
-  List<Achievement> _achievements = [];
   Map<String, dynamic>? _myLeague;
   bool _isLoading = true;
+  int _totalParticipants = 0;
 
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 2, vsync: this);
     _loadData();
-  }
-
-  @override
-  void dispose() {
-    _tabController.dispose();
-    super.dispose();
   }
 
   Future<void> _loadData() async {
@@ -34,292 +28,284 @@ class _LeaderboardScreenState extends State<LeaderboardScreen> with SingleTicker
     try {
       final results = await Future.wait([
         ApiService.getLeaderboard(),
-        ApiService.getAchievements(),
         ApiService.getMyLeague(),
       ]);
+      if (!mounted) return;
       setState(() {
         _leaderboard = results[0] as List<LeaderboardEntry>;
-        _achievements = results[1] as List<Achievement>;
-        _myLeague = results[2] as Map<String, dynamic>;
+        _myLeague = results[1] as Map<String, dynamic>;
+        _totalParticipants = _leaderboard.length;
         _isLoading = false;
       });
     } catch (e) {
+      if (!mounted) return;
       setState(() => _isLoading = false);
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(e.toString().replaceAll('Exception: ', ''))),
-        );
-      }
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(e.toString().replaceAll('Exception: ', ''))),
+      );
     }
   }
 
+  String _fmt(int n) => n.toString().replaceAllMapped(
+        RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'),
+        (Match m) => '${m[1]} ',
+      );
+
   @override
   Widget build(BuildContext context) {
+    final user = context.watch<UserProvider>().user;
+    final balance = user?.bonusBalance.toInt() ?? 0;
+    final myRank = _myLeague?['rank'] ?? 0;
+
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Рейтинг и достижения'),
-        backgroundColor: const Color(0xFF1A1A2E),
-        foregroundColor: Colors.white,
-        bottom: TabBar(
-          controller: _tabController,
-          labelColor: const Color(0xFFE94560),
-          unselectedLabelColor: Colors.white70,
-          indicatorColor: const Color(0xFFE94560),
-          tabs: const [
-            Tab(text: '🏆 Лидерборд'),
-            Tab(text: '🎖 Достижения'),
-          ],
-        ),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.refresh),
-            onPressed: _loadData,
-          ),
-        ],
-      ),
-      body: Container(
-        decoration: const BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-            colors: [Color(0xFF1A1A2E), Color(0xFF16213E)],
-          ),
-        ),
+      backgroundColor: const Color(0xFFF6F6F6),
+      body: SafeArea(
         child: _isLoading
-            ? const Center(child: CircularProgressIndicator(color: Color(0xFFE94560)))
-            : TabBarView(
-                controller: _tabController,
+            ? const Center(child: CircularProgressIndicator(color: Color(0xFFE31E24)))
+            : SingleChildScrollView(
+          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // 1. ШАПКА
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  _buildLeaderboard(),
-                  _buildAchievements(),
+                  Row(
+                    children: [
+                      Container(
+                        width: 40,
+                        height: 40,
+                        decoration: const BoxDecoration(
+                          color: Color(0xFFE31E24),
+                          shape: BoxShape.circle,
+                        ),
+                        child: const Icon(Icons.emoji_events_outlined, color: Colors.white, size: 22),
+                      ),
+                      const SizedBox(width: 12),
+                      const Text(
+                        'SKS QUEST',
+                        style: TextStyle(
+                          fontSize: 20,
+                          fontWeight: FontWeight.w800,
+                          color: Colors.black,
+                        ),
+                      ),
+                    ],
+                  ),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      border: Border.all(color: const Color(0xFFB3B3B3)),
+                      borderRadius: BorderRadius.circular(20),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Icon(Icons.diamond_outlined, size: 16, color: Colors.black),
+                        const SizedBox(width: 6),
+                        Text(
+                          _fmt(balance),
+                          style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold),
+                        ),
+                      ],
+                    ),
+                  ),
                 ],
               ),
+              const SizedBox(height: 24),
+
+              // 2. КАРТОЧКА МЕСТА ПОЛЬЗОВАТЕЛЯ
+              Center(
+                child: Container(
+                  width: 228,
+                  padding: const EdgeInsets.symmetric(vertical: 20),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFE31E24),
+                    borderRadius: BorderRadius.circular(16),
+                  ),
+                  child: Column(
+                    children: [
+                      const Text(
+                        'Ваше место',
+                        style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: Color(0xFFF2F2F2)),
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        '#$myRank',
+                        style: const TextStyle(fontSize: 45, fontWeight: FontWeight.w900, color: Colors.white),
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        'Из ${_fmt(_totalParticipants)} участников',
+                        style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: Color(0xFFF2F2F2)),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              const SizedBox(height: 24),
+
+              // 3. ПЬЕДЕСТАЛ ПОЧЕТА (Топ-3)
+              if (_leaderboard.isNotEmpty)
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: [
+                    // 2-е место
+                    if (_leaderboard.length > 1)
+                      _buildPodiumColumn(
+                        place: '2',
+                        name: _leaderboard[1].pseudonym,
+                        avatarColor: const Color(0xFF6C707D),
+                        podiumColor: const Color(0xFFF2F2F2),
+                        podiumHeight: 60,
+                        emoji: _getEmoji(_leaderboard[1].pseudonym),
+                      ),
+                    if (_leaderboard.length > 1) const SizedBox(width: 12),
+                    // 1-е место
+                    if (_leaderboard.isNotEmpty)
+                      _buildPodiumColumn(
+                        place: '🏆',
+                        name: _leaderboard[0].pseudonym,
+                        avatarColor: const Color(0xFF3B5998),
+                        podiumColor: const Color(0x35FFC800),
+                        podiumHeight: 90,
+                        emoji: _getEmoji(_leaderboard[0].pseudonym),
+                      ),
+                    if (_leaderboard.isNotEmpty) const SizedBox(width: 12),
+                    // 3-е место
+                    if (_leaderboard.length > 2)
+                      _buildPodiumColumn(
+                        place: '3',
+                        name: _leaderboard[2].pseudonym,
+                        avatarColor: const Color(0xFF8B6530),
+                        podiumColor: const Color(0xFFF2F2F2),
+                        podiumHeight: 45,
+                        emoji: _getEmoji(_leaderboard[2].pseudonym),
+                      ),
+                  ],
+                ),
+              const SizedBox(height: 30),
+
+              // 4. ТАБЛИЦА ЛИДЕРОВ
+              const Text(
+                'Топ участников',
+                style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.black),
+              ),
+              const SizedBox(height: 12),
+
+              ..._leaderboard.map((entry) => _buildLeaderRow(entry, _myLeague?['pseudonym'])),
+
+              const SizedBox(height: 16),
+              const Center(
+                child: Padding(
+                  padding: EdgeInsets.symmetric(horizontal: 20),
+                  child: Text(
+                    'Рейтинг обновляется ежемесячно. Топ-3 получают призы автоматически.',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      fontSize: 8,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.black45,
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }
 
-  Widget _buildLeaderboard() {
+  Widget _buildPodiumColumn({
+    required String place,
+    required String name,
+    required Color avatarColor,
+    required Color podiumColor,
+    required double podiumHeight,
+    required String emoji,
+  }) {
     return Column(
       children: [
-        // Моя лига
-        if (_myLeague != null)
-          Container(
-            margin: const EdgeInsets.all(12),
-            padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
-              gradient: const LinearGradient(
-                colors: [Color(0xFFE94560), Color(0xFFC23152)],
-              ),
-              borderRadius: BorderRadius.circular(16),
-            ),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text('Моя лига', style: TextStyle(color: Colors.white70, fontSize: 12)),
-                    Text(
-                      _myLeague!['league'],
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 22,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                  ],
-                ),
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.end,
-                  children: [
-                    const Text('Позиция', style: TextStyle(color: Colors.white70, fontSize: 12)),
-                    Text(
-                      '#${_myLeague!['rank']}',
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 22,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                  ],
-                ),
-              ],
+        Container(
+          width: 52,
+          height: 52,
+          decoration: BoxDecoration(
+            color: avatarColor,
+            shape: BoxShape.circle,
+          ),
+          child: Center(
+            child: Text(
+              emoji,
+              style: const TextStyle(fontSize: 24),
             ),
           ),
-
-        // Таблица лидеров
-        Expanded(
-          child: ListView.builder(
-            padding: const EdgeInsets.symmetric(horizontal: 12),
-            itemCount: _leaderboard.length,
-            itemBuilder: (context, index) {
-              final entry = _leaderboard[index];
-              return _buildLeaderboardItem(entry, index);
-            },
+        ),
+        const SizedBox(height: 4),
+        Text(
+          name,
+          style: const TextStyle(fontSize: 8, fontWeight: FontWeight.bold, color: Colors.black),
+        ),
+        const SizedBox(height: 6),
+        Container(
+          width: 60,
+          height: podiumHeight,
+          decoration: BoxDecoration(
+            color: podiumColor,
+            border: Border.all(color: const Color(0xFFB3B3B3)),
+            borderRadius: BorderRadius.circular(11),
+          ),
+          child: Center(
+            child: place == '🏆'
+                ? const Icon(Icons.emoji_events, color: Colors.amber, size: 24)
+                : Text(
+                    place,
+                    style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: Colors.black),
+                  ),
           ),
         ),
       ],
     );
   }
 
-  Widget _buildLeaderboardItem(LeaderboardEntry entry, int index) {
-    final medals = ['🥇', '🥈', '🥉'];
-    final isTop3 = index < 3;
-
+  Widget _buildLeaderRow(LeaderboardEntry entry, String? currentUser) {
+    final isCurrentUser = entry.pseudonym == currentUser;
     return Container(
       margin: const EdgeInsets.only(bottom: 8),
-      padding: const EdgeInsets.all(12),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
       decoration: BoxDecoration(
-        color: isTop3
-            ? Colors.white.withOpacity(0.1)
-            : Colors.white.withOpacity(0.03),
-        borderRadius: BorderRadius.circular(12),
+        color: const Color(0xFFF2F2F2),
         border: Border.all(
-          color: isTop3 ? Colors.amber.withOpacity(0.3) : Colors.white.withOpacity(0.05),
+          color: isCurrentUser ? Colors.black : const Color(0xFFB3B3B3),
+          width: isCurrentUser ? 2.0 : 1.0,
         ),
+        borderRadius: BorderRadius.circular(11),
       ),
       child: Row(
         children: [
-          // Ранг
           SizedBox(
-            width: 40,
+            width: 24,
             child: Text(
-              isTop3 ? medals[index] : '#${entry.rank}',
-              style: const TextStyle(
-                color: Colors.white,
-                fontSize: 18,
-                fontWeight: FontWeight.bold,
-              ),
-              textAlign: TextAlign.center,
+              '${entry.rank}',
+              style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: Colors.black),
             ),
           ),
-          const SizedBox(width: 12),
-          // Аватар
-          CircleAvatar(
-            radius: 20,
-            backgroundColor: _getLeagueColor(entry.league).withOpacity(0.2),
-            child: Text(
-              entry.pseudonym.substring(0, 1),
-              style: TextStyle(
-                color: _getLeagueColor(entry.league),
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-          ),
-          const SizedBox(width: 12),
-          // Информация
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  entry.pseudonym,
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontWeight: FontWeight.bold,
-                    fontSize: 15,
-                  ),
-                ),
-                Text(
-                  '${entry.bonusEarnedMonth.toInt()} бонусов за месяц',
-                  style: const TextStyle(color: Colors.white70, fontSize: 12),
-                ),
-              ],
-            ),
-          ),
-          // Лига
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-            decoration: BoxDecoration(
-              color: _getLeagueColor(entry.league).withOpacity(0.2),
-              borderRadius: BorderRadius.circular(8),
-              border: Border.all(color: _getLeagueColor(entry.league)),
-            ),
-            child: Text(
-              entry.league,
-              style: TextStyle(
-                color: _getLeagueColor(entry.league),
-                fontWeight: FontWeight.bold,
-                fontSize: 11,
-              ),
-            ),
+          const SizedBox(width: 8),
+          Text(
+            entry.pseudonym,
+            style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: Colors.black),
           ),
         ],
       ),
     );
   }
 
-  Widget _buildAchievements() {
-    return GridView.builder(
-      padding: const EdgeInsets.all(12),
-      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-        crossAxisCount: 2,
-        crossAxisSpacing: 12,
-        mainAxisSpacing: 12,
-        childAspectRatio: 0.85,
-      ),
-      itemCount: _achievements.length,
-      itemBuilder: (context, index) {
-        final achievement = _achievements[index];
-        return Container(
-          padding: const EdgeInsets.all(12),
-          decoration: BoxDecoration(
-            color: Colors.white.withOpacity(0.05),
-            borderRadius: BorderRadius.circular(16),
-            border: Border.all(color: Colors.white.withOpacity(0.1)),
-          ),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Icon(
-                Icons.emoji_events,
-                size: 40,
-                color: achievement.bonusReward >= 500
-                    ? const Color(0xFFFFD700)
-                    : const Color(0xFFE94560),
-              ),
-              const SizedBox(height: 8),
-              Text(
-                achievement.name,
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontWeight: FontWeight.bold,
-                  fontSize: 13,
-                ),
-                textAlign: TextAlign.center,
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
-              ),
-              const SizedBox(height: 4),
-              Text(
-                '+${achievement.bonusReward} бонусов',
-                style: const TextStyle(color: Color(0xFFE94560), fontSize: 12),
-              ),
-              if (achievement.description != null) ...[
-                const SizedBox(height: 4),
-                Text(
-                  achievement.description!,
-                  style: const TextStyle(color: Colors.white54, fontSize: 10),
-                  textAlign: TextAlign.center,
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ],
-            ],
-          ),
-        );
-      },
-    );
-  }
-
-  Color _getLeagueColor(String league) {
-    switch (league) {
-      case 'Бриллиант': return const Color(0xFF00BCD4);
-      case 'Платина': return const Color(0xFF9C27B0);
-      case 'Золото': return const Color(0xFFFFD700);
-      case 'Серебро': return const Color(0xFFB0BEC5);
-      case 'Бронза': return const Color(0xFFCD7F32);
-      default: return Colors.grey;
-    }
+  String _getEmoji(String name) {
+    final hash = name.hashCode.abs();
+    final emojis = ['🐱', '🐶', '🦊', '🐼', '🐨', '🐯', '🦁', '🐮', '🐷', '🐸'];
+    return emojis[hash % emojis.length];
   }
 }
