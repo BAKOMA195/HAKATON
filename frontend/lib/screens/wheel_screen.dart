@@ -343,70 +343,28 @@ class _WheelScreenState extends State<WheelScreen> {
       onTap: canOpen ? () => _openChest(index) : null,
       child: Column(
         children: [
-          Container(
+          SizedBox(
             width: 80,
             height: 80,
-            decoration: BoxDecoration(
-              color: isOpened ? const Color(0xFF8B6530) : const Color(0xFF6B4226),
-              borderRadius: BorderRadius.circular(16),
-              border: Border.all(
-                color: isOpened ? Colors.amber[600]! : Colors.amber[700]!,
-                width: 3,
-              ),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withOpacity(0.2),
-                  blurRadius: 6,
-                  offset: const Offset(0, 4),
-                ),
-              ],
-            ),
-            child: Stack(
-              alignment: Alignment.center,
-              children: [
-                Positioned(
-                  top: 0,
-                  child: Container(
-                    width: 74,
-                    height: 30,
-                    decoration: BoxDecoration(
-                      color: isOpened ? const Color(0xFF7A5828) : const Color(0xFF5C3820),
-                      borderRadius: const BorderRadius.only(
-                        topLeft: Radius.circular(12),
-                        topRight: Radius.circular(12),
+            child: isOpeningThis
+                ? const Center(
+                    child: SizedBox(
+                      width: 20,
+                      height: 20,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        color: Color(0xFFFFC800),
                       ),
                     ),
-                  ),
-                ),
-                if (isOpened)
-                  const Icon(
-                    Icons.check_circle,
-                    size: 30,
-                    color: Color(0xFFFFC800),
                   )
-                else if (isOpeningThis)
-                  const SizedBox(
-                    width: 20,
-                    height: 20,
-                    child: CircularProgressIndicator(
-                      strokeWidth: 2,
-                      color: Color(0xFFFFC800),
-                    ),
-                  )
-                else
-                  Container(
-                    width: 18,
-                    height: 18,
-                    decoration: const BoxDecoration(
-                      color: Color(0xFFFFC800),
-                      shape: BoxShape.circle,
-                    ),
-                    child: const Center(
-                      child: Icon(Icons.lock, size: 10, color: Colors.black),
-                    ),
+                : Image.asset(
+                    isOpened
+                        ? 'assets/chest_open.png'
+                        : 'assets/chest_closed.png',
+                    width: 80,
+                    height: 80,
+                    fit: BoxFit.contain,
                   ),
-              ],
-            ),
           ),
           const SizedBox(height: 8),
           Text(
